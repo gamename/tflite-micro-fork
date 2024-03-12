@@ -1,9 +1,11 @@
 import os
 import sys
+from datetime import datetime
 
-# We add this path so we can import the speech processing modules.
 import numpy as np
 import tensorflow as tf
+
+start_time = datetime.now()
 
 # A comma-delimited list of the words you want to train for.
 # The options are: yes,no,up,down,left,right,on,off,stop,go
@@ -228,3 +230,15 @@ print(f"kAudioSampleFrequency = {SAMPLE_RATE}\n"
       f"kFeatureElementCount (kFeatureSize * kFeatureCount) = {FEATURE_BIN_COUNT * kFeatureCount}\n"
       f"kFeatureStrideMs = {WINDOW_STRIDE}\n"
       f"kFeatureDurationMs = {WINDOW_SIZE_MS}\n")
+
+# Mark the end time
+end_time = datetime.now()
+
+# Calculate the total execution time
+execution_time = end_time - start_time
+
+# Convert the execution time to hours and minutes
+execution_hours, remainder = divmod(execution_time.seconds, 3600)
+execution_minutes = remainder // 60
+
+print(f"Total execution time: {execution_hours} hours and {execution_minutes} minutes")
