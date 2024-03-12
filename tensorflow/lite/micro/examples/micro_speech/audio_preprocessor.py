@@ -23,35 +23,34 @@ bazel-bin/tensorflow/lite/micro/examples/micro_speech/audio_preprocessor
 """
 
 from __future__ import annotations
-from pathlib import Path
-from dataclasses import dataclass
+
 import tempfile
+from dataclasses import dataclass
+from pathlib import Path
 
 from absl import app
 from absl import flags
-
-import tensorflow as tf
 from tensorflow.python.platform import resource_loader
-from tflite_micro.python.tflite_micro.signal.ops import window_op
-from tflite_micro.python.tflite_micro.signal.ops import fft_ops
+from tflite_micro.python.tflite_micro import runtime
 from tflite_micro.python.tflite_micro.signal.ops import energy_op
+from tflite_micro.python.tflite_micro.signal.ops import fft_ops
 from tflite_micro.python.tflite_micro.signal.ops import filter_bank_ops
 from tflite_micro.python.tflite_micro.signal.ops import pcan_op
-from tflite_micro.python.tflite_micro import runtime
+from tflite_micro.python.tflite_micro.signal.ops import window_op
 
-_ENABLE_DEBUG = flags.DEFINE_enum(
-    'debug_mode',
-    'off',
-    ['off', 'all'],
-    'Enable debug output',
-)
+import tensorflow as tf
 
-_FILE_TO_TEST = flags.DEFINE_enum('file_to_test', 'no', ['no', 'yes'],
+_ENABLE_DEBUG = flags.DEFINE_enum('debug_mode',
+                                  'off', ['off', 'all'],
+                                  'Enable debug output')
+
+_FILE_TO_TEST = flags.DEFINE_enum('file_to_test',
+                                  'meow', ['no', 'yes', 'meow'],
                                   'File to test')
 
-_OUTPUT_TYPE = flags.DEFINE_enum(
-    'output_type', 'int8', ['int8', 'float32'],
-    'Type of TfLite output file (.tflite) to generate')
+_OUTPUT_TYPE = flags.DEFINE_enum('output_type',
+                                 'int8', ['int8', 'float32'],
+                                 'Type of TfLite output file (.tflite) to generate')
 
 
 def _debug_print(*args):
