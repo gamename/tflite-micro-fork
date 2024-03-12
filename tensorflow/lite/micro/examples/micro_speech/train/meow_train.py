@@ -73,7 +73,7 @@ COMMAND_DIR = (
   '/Users/tennis/src/tflite-micro-fork/tensorflow/lite/micro/examples/micro_speech/tensorflow/tensorflow/examples'
   '/speech_commands')
 
-print("Training the model (this may take quite a while)...")
+print("Training the model (this will take quite a while)...")
 os.system(f'python {COMMAND_DIR}/train.py \
         --data_url= "" \
         --data_dir={DATASET_DIR} \
@@ -144,15 +144,25 @@ audio_processor = input_data.AudioProcessor(
 
 
 def representative_dataset_gen():
-  for i in range(8):
-    data, _ = audio_processor.get_data(1, i * 1, model_settings,
-                                       BACKGROUND_FREQUENCY,
-                                       BACKGROUND_VOLUME_RANGE,
-                                       TIME_SHIFT_MS,
-                                       'testing',
-                                       sess)
+  # Assume we have a method to get the total number of test samples
+  total_test_samples = len(audio_processor.get_data(-1, 0,
+                                                    model_settings,
+                                                    BACKGROUND_FREQUENCY,
+                                                    BACKGROUND_VOLUME_RANGE,
+                                                    TIME_SHIFT_MS,
+                                                    'testing', sess)[0])
+
+  # Decide on the number of samples for the representative dataset
+  # Use 100 samples or 10% of the dataset, whichever is smaller
+  num_representative_samples = min(100, total_test_samples // 10)
+
+  # Calculate the step size to evenly distribute the representative samples across the dataset
+  step_size = max(1, total_test_samples // num_representative_samples)
+
+  for i in range(0, total_test_samples, step_size):
+    data, _ = audio_processor.get_data(1, i, model_settings, BACKGROUND_FREQUENCY, BACKGROUND_VOLUME_RANGE,
+                                       TIME_SHIFT_MS, 'testing', sess)
     flattened_data = np.array(data.flatten(), dtype=np.float32).reshape(1, 1960)
-    print(flattened_data)
     yield [flattened_data]
 
 
