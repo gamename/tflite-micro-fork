@@ -51,13 +51,18 @@ EVAL_STEP_INTERVAL = '1000'
 SAVE_STEP_INTERVAL = '1000'
 
 # Constants for training directories and filepaths
-DATASET_DIR = '/tmp/samples/'
-LOGS_DIR = 'logs/'
-TRAIN_DIR = 'train/'  # for training checkpoints and other files.
+DATASET_DIR = '/tmp/meow-dataset/'
+
+PARENT_DIR = start_time.strftime('%Y-%m-%d_%H-%M-%S')
+os.makedirs(PARENT_DIR)
+
+LOGS_DIR = os.path.join(PARENT_DIR, 'logs/')
+TRAIN_DIR = os.path.join(PARENT_DIR, 'train/')
 
 # Constants for inference directories and filepaths
 
-MODELS_DIR = 'models/'
+MODELS_DIR = os.path.join(PARENT_DIR, 'models/')
+
 if not os.path.exists(MODELS_DIR):
   os.mkdir(MODELS_DIR)
 MODEL_TF = os.path.join(MODELS_DIR, 'meow.pb')
@@ -70,11 +75,12 @@ QUANT_INPUT_MIN = 0.0
 QUANT_INPUT_MAX = 26.0
 QUANT_INPUT_RANGE = QUANT_INPUT_MAX - QUANT_INPUT_MIN
 COMMAND_DIR = (
-  '/Users/tennis/src/tflite-micro-fork/tensorflow/lite/micro/examples/micro_speech/tensorflow/tensorflow/examples'
-  '/speech_commands')
+  '/Users/tennis/src/tflite-micro-fork'
+  '/tensorflow/lite/micro/examples/micro_speech/tensorflow/tensorflow/examples/speech_commands'
+)
 
 print("Training the model (this will take quite a while)...")
-os.system(f'python {COMMAND_DIR}/train.py \
+train_exit_status = os.system(f'python {COMMAND_DIR}/train.py \
         --data_url= "" \
         --data_dir={DATASET_DIR} \
         --wanted_words={WANTED_WORDS} \
@@ -90,11 +96,15 @@ os.system(f'python {COMMAND_DIR}/train.py \
         --verbosity={VERBOSITY} \
         --eval_step_interval={EVAL_STEP_INTERVAL} \
         --save_step_interval={SAVE_STEP_INTERVAL}'
-          )
+                              )
+
+if train_exit_status != 0:
+  print("Training failed")
+  exit(train_exit_status)
 
 print("Freezing the model")
 
-os.system(f'python {COMMAND_DIR}/freeze.py \
+freeze_exit_status = os.system(f'python {COMMAND_DIR}/freeze.py \
        --wanted_words={WANTED_WORDS} \
        --window_stride_ms={WINDOW_STRIDE} \
        --preprocess={PREPROCESS} \
@@ -103,6 +113,10 @@ os.system(f'python {COMMAND_DIR}/freeze.py \
        --save_format=saved_model \
        --output_file={SAVED_MODEL}'
           )
+
+if freeze_exit_status != 0:
+  print("Freezing failed")
+  exit(freeze_exit_status)
 
 SAMPLE_RATE = 16000
 CLIP_DURATION_MS = 1000
