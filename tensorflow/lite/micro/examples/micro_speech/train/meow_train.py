@@ -112,7 +112,7 @@ freeze_exit_status = os.system(f'python {COMMAND_DIR}/freeze.py \
        --start_checkpoint={TRAIN_DIR}{MODEL_ARCHITECTURE}.ckpt-{TOTAL_STEPS} \
        --save_format=saved_model \
        --output_file={SAVED_MODEL}'
-          )
+                               )
 
 if freeze_exit_status != 0:
   print("Freezing failed")
