@@ -116,7 +116,7 @@ def get_model_predictions_and_labels(tflite_model_path, test_data, test_labels):
   return np.array(predictions), np.array(test_labels)
 
 
-def representative_dataset_gen():
+def representative_dataset_gen(audio_processor, model_settings, sess):
   # Assume we have a method to get the total number of test samples
   total_test_samples = len(audio_processor.get_data(-1, 0,
                                                     model_settings,
@@ -139,7 +139,7 @@ def representative_dataset_gen():
     yield [flattened_data]
 
 
-def run_tflite_inference(tflite_model_path, model_type="Float"):
+def run_tflite_inference(audio_processor, model_settings, tflite_model_path, model_type="Float"):
   # Load test data
   np.random.seed(0)  # set random seed for reproducible test results.
   with tf.compat.v1.Session() as sess:
@@ -184,7 +184,7 @@ def run_tflite_inference(tflite_model_path, model_type="Float"):
         f' (Number of test samples={len(test_data)})')
 
 
-def collect_model_predictions(tflite_model_path, model_type="Float"):
+def collect_model_predictions(audio_processor, model_settings, tflite_model_path, model_type="Float"):
   # Load test data
   np.random.seed(0)  # set random seed for reproducible test results.
   with tf.compat.v1.Session() as sess:
@@ -296,20 +296,19 @@ def main():
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.inference_input_type = tf.int8
     converter.inference_output_type = tf.int8
-    converter.representative_dataset = representative_dataset_gen
+    converter.representative_dataset = lambda: representative_dataset_gen(audio_processor, model_settings, sess)
     tflite_model = converter.convert()
     tflite_model_size = open(MODEL_TFLITE, "wb").write(tflite_model)
     print("Quantized model is %d bytes" % tflite_model_size)
-
-  # Helper function to run inference
 
   # Compute float model accuracy
   # run_tflite_inference(FLOAT_MODEL_TFLITE)
 
   # Compute quantized model accuracy
-  run_tflite_inference(MODEL_TFLITE, model_type='Quantized')
+  run_tflite_inference(audio_processor, model_settings, MODEL_TFLITE, model_type='Quantized')
 
-  test_data, test_labels = collect_model_predictions(MODEL_TFLITE, model_type='Quantized')
+  test_data, test_labels = collect_model_predictions(audio_processor, model_settings,
+                                                     MODEL_TFLITE, model_type='Quantized')
 
   # Assuming you have your test_data and test_labels prepared
   predictions, true_labels = get_model_predictions_and_labels(MODEL_TFLITE, test_data, test_labels)
@@ -318,7 +317,7 @@ def main():
   scores = predictions[:, 1]
 
   # Compute Precision-Recall and plot curve
-  precision, recall, thresholds = precision_recall_curve(true_labels, scores)
+  precision, recall, _ = precision_recall_curve(true_labels, scores)
   plt.plot(recall, precision, marker='.', label='Precision-Recall Curve')
   plt.xlabel('Recall')
   plt.ylabel('Precision')
