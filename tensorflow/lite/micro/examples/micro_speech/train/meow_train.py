@@ -199,7 +199,9 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
   interpreter.allocate_tensors()
 
   input_details = interpreter.get_input_details()[0]
+  print(f"Input details: {input_details}")
   output_details = interpreter.get_output_details()[0]
+  print(f"Output details: {output_details}")
 
   # Prepare arrays to store predictions and labels
   predictions = []
@@ -219,8 +221,6 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
     predictions.append(output)
     labels.append(test_labels[i])
 
-  # Convert predictions to a more convenient format if necessary, e.g., softmax probabilities
-  # For now, returning raw scores
   return np.array(predictions), np.array(labels)
 
 
@@ -291,7 +291,6 @@ def main():
     float_tflite_model = float_converter.convert()
     float_tflite_model_size = open(FLOAT_MODEL_TFLITE, "wb").write(float_tflite_model)
     print("Float model is %d bytes" % float_tflite_model_size)
-
     converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.inference_input_type = tf.int8
@@ -301,10 +300,10 @@ def main():
     tflite_model_size = open(MODEL_TFLITE, "wb").write(tflite_model)
     print("Quantized model is %d bytes" % tflite_model_size)
 
-  # Compute float model accuracy
-  # run_tflite_inference(FLOAT_MODEL_TFLITE)
+  print("Compute float model accuracy")
+  run_tflite_inference(audio_processor, model_settings, FLOAT_MODEL_TFLITE)
 
-  # Compute quantized model accuracy
+  print("Compute quantized model accuracy")
   run_tflite_inference(audio_processor, model_settings, MODEL_TFLITE, model_type='Quantized')
 
   test_data, test_labels = collect_model_predictions(audio_processor, model_settings,
