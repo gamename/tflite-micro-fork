@@ -41,11 +41,11 @@ from tflite_micro.python.tflite_micro.signal.ops import window_op
 import tensorflow as tf
 
 _ENABLE_DEBUG = flags.DEFINE_enum('debug_mode',
-                                  'off', ['off', 'all'],
+                                  'all', ['off', 'all'],
                                   'Enable debug output')
 
 _FILE_TO_TEST = flags.DEFINE_enum('file_to_test',
-                                  'meow', ['no', 'yes', 'meow'],
+                                  'meow', ['meow', 'no', 'yes'],
                                   'File to test')
 
 _OUTPUT_TYPE = flags.DEFINE_enum('output_type',
