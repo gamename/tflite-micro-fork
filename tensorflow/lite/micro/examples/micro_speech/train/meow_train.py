@@ -99,22 +99,6 @@ VALIDATION_PERCENTAGE = 10
 TESTING_PERCENTAGE = 10
 
 
-def get_model_predictions_and_labels(tflite_model_path, test_data, test_labels):
-  interpreter = tf.lite.Interpreter(model_path=tflite_model_path)
-  interpreter.allocate_tensors()
-
-  input_details = interpreter.get_input_details()[0]
-  output_details = interpreter.get_output_details()[0]
-
-  predictions = []
-  for i in range(len(test_data)):
-    interpreter.set_tensor(input_details['index'], test_data[i:i + 1])
-    interpreter.invoke()
-    output_data = interpreter.get_tensor(output_details['index'])
-    predictions.append(output_data[0])
-
-  return np.array(predictions), np.array(test_labels)
-
 
 def representative_dataset_gen(audio_processor, model_settings, sess):
   # Assume we have a method to get the total number of test samples
@@ -226,23 +210,24 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
 
 def main():
   print("Training the model (this will take quite a while)...")
-  train_exit_status = os.system(f'python {COMMAND_DIR}/train.py \
-            --data_url= "" \
-            --data_dir={DATASET_DIR} \
-            --wanted_words={WANTED_WORDS} \
-            --silence_percentage={SILENT_PERCENTAGE} \
-            --unknown_percentage={UNKNOWN_PERCENTAGE} \
-            --preprocess={PREPROCESS} \
-            --window_stride={WINDOW_STRIDE} \
-            --model_architecture={MODEL_ARCHITECTURE} \
-            --how_many_training_steps={TRAINING_STEPS} \
-            --learning_rate={LEARNING_RATE} \
-            --train_dir={TRAIN_DIR} \
-            --summaries_dir={LOGS_DIR} \
-            --verbosity={VERBOSITY} \
-            --eval_step_interval={EVAL_STEP_INTERVAL} \
-            --save_step_interval={SAVE_STEP_INTERVAL}'
-                                )
+  train_exit_status = os.system(
+    f'python {COMMAND_DIR}/train.py \
+    --data_url= "" \
+    --data_dir={DATASET_DIR} \
+    --wanted_words={WANTED_WORDS} \
+    --silence_percentage={SILENT_PERCENTAGE} \
+    --unknown_percentage={UNKNOWN_PERCENTAGE} \
+    --preprocess={PREPROCESS} \
+    --window_stride={WINDOW_STRIDE} \
+    --model_architecture={MODEL_ARCHITECTURE} \
+    --how_many_training_steps={TRAINING_STEPS} \
+    --learning_rate={LEARNING_RATE} \
+    --train_dir={TRAIN_DIR} \
+    --summaries_dir={LOGS_DIR} \
+    --verbosity={VERBOSITY} \
+    --eval_step_interval={EVAL_STEP_INTERVAL} \
+    --save_step_interval={SAVE_STEP_INTERVAL}'
+  )
 
   if train_exit_status != 0:
     print("Training failed")
@@ -250,15 +235,16 @@ def main():
 
   print("Freezing the model")
 
-  freeze_exit_status = os.system(f'python {COMMAND_DIR}/freeze.py \
-           --wanted_words={WANTED_WORDS} \
-           --window_stride_ms={WINDOW_STRIDE} \
-           --preprocess={PREPROCESS} \
-           --model_architecture={MODEL_ARCHITECTURE} \
-           --start_checkpoint={TRAIN_DIR}{MODEL_ARCHITECTURE}.ckpt-{TOTAL_STEPS} \
-           --save_format=saved_model \
-           --output_file={SAVED_MODEL}'
-                                 )
+  freeze_exit_status = os.system(
+    f'python {COMMAND_DIR}/freeze.py \
+    --wanted_words={WANTED_WORDS} \
+    --window_stride_ms={WINDOW_STRIDE} \
+    --preprocess={PREPROCESS} \
+    --model_architecture={MODEL_ARCHITECTURE} \
+    --start_checkpoint={TRAIN_DIR}{MODEL_ARCHITECTURE}.ckpt-{TOTAL_STEPS} \
+    --save_format=saved_model \
+    --output_file={SAVED_MODEL}'
+  )
 
   if freeze_exit_status != 0:
     print("Freezing failed")
@@ -306,11 +292,8 @@ def main():
   print("Compute quantized model accuracy")
   run_tflite_inference(audio_processor, model_settings, MODEL_TFLITE, model_type='Quantized')
 
-  test_data, test_labels = collect_model_predictions(audio_processor, model_settings,
+  predictions, true_labels = collect_model_predictions(audio_processor, model_settings,
                                                      MODEL_TFLITE, model_type='Quantized')
-
-  # Assuming you have your test_data and test_labels prepared
-  predictions, true_labels = get_model_predictions_and_labels(MODEL_TFLITE, test_data, test_labels)
 
   # For binary classification, get the scores of the positive class
   scores = predictions[:, 1]
