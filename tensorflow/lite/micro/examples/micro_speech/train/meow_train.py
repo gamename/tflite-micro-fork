@@ -5,7 +5,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import precision_recall_curve, average_precision_score
 
 COMMAND_DIR = (
   '/Users/tennis/src/tflite-micro-fork'
@@ -98,6 +98,51 @@ DATA_URL = ''
 VALIDATION_PERCENTAGE = 10
 TESTING_PERCENTAGE = 10
 
+
+def evaluate_multiclass_precision_recall(predictions, true_labels, plot_curves=False):
+  """
+  Evaluates and optionally plots the Precision-Recall curve for each class in a multiclass setting.
+
+  Parameters:
+  - predictions: numpy array of shape (num_samples, num_classes) containing the prediction scores for each class.
+  - true_labels: numpy array of shape (num_samples,) containing the true class labels.
+  - plot_curves: bool, if True, plot the Precision-Recall curve for each class.
+
+  Returns:
+  - A dictionary containing precision, recall, and average precision for each class.
+  """
+  num_classes = predictions.shape[1]
+  metrics_dict = {}
+
+  for i in range(num_classes):
+    # Prepare binary labels and scores for the current class
+    binary_true_labels = (true_labels == i).astype(int)
+    scores = predictions[:, i]
+
+    # Compute precision, recall, and average precision
+    precision, recall, _ = precision_recall_curve(binary_true_labels, scores)
+    average_precision = average_precision_score(binary_true_labels, scores)
+
+    # Store metrics
+    metrics_dict[i] = {
+      'precision': precision,
+      'recall': recall,
+      'average_precision': average_precision
+    }
+
+    # Optionally plot Precision-Recall curve
+    if plot_curves:
+      plt.figure()
+      plt.step(recall, precision, where='post')
+      plt.fill_between(recall, precision, step='post', alpha=0.2, color='b')
+      plt.xlabel('Recall')
+      plt.ylabel('Precision')
+      plt.ylim([0.0, 1.05])
+      plt.xlim([0.0, 1.0])
+      plt.title(f'Class {i} Precision-Recall curve: AP={average_precision:0.2f}')
+      plt.show()
+
+  return metrics_dict
 
 
 def representative_dataset_gen(audio_processor, model_settings, sess):
@@ -293,18 +338,20 @@ def main():
   run_tflite_inference(audio_processor, model_settings, MODEL_TFLITE, model_type='Quantized')
 
   predictions, true_labels = collect_model_predictions(audio_processor, model_settings,
-                                                     MODEL_TFLITE, model_type='Quantized')
+                                                       MODEL_TFLITE, model_type='Quantized')
 
-  # For binary classification, get the scores of the positive class
-  scores = predictions[:, 1]
+  metrics_dict = evaluate_multiclass_precision_recall(predictions, true_labels, plot_curves=True)
 
-  # Compute Precision-Recall and plot curve
-  precision, recall, _ = precision_recall_curve(true_labels, scores)
-  plt.plot(recall, precision, marker='.', label='Precision-Recall Curve')
-  plt.xlabel('Recall')
-  plt.ylabel('Precision')
-  plt.legend()
-  plt.show()
+  print(metrics_dict)
+
+  # Example: Analyzing average precision across classes
+  average_precisions = {class_id: metrics['average_precision'] for class_id, metrics in metrics_dict.items()}
+  # Find the class with the lowest AP score
+  worst_class_id = min(average_precisions, key=average_precisions.get)
+  print(f"Class with the lowest AP score: {worst_class_id}, AP: {average_precisions[worst_class_id]}")
+
+  # This information could lead to further investigation and targeted improvement efforts for the worst-performing
+  # class.
 
   os.system(f'xxd -i {MODEL_TFLITE} > {MODEL_TFLITE_MICRO}')
   REPLACE_TEXT = MODEL_TFLITE.replace('/', '_').replace('.', '_')
