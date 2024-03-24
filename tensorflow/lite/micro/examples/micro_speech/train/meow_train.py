@@ -62,12 +62,12 @@ EVAL_STEP_INTERVAL = '1000'
 SAVE_STEP_INTERVAL = '1000'
 
 # Constants for training directories and filepaths
-DATASET_DIR = '/tmp/meow-dataset/'
+DATASET_DIR = '/tmp/meow-dataset-03-24-24/'
 
 PARENT_DIR = start_time.strftime('%Y-%m-%d_%H-%M-%S')
 os.makedirs(PARENT_DIR)
 
-LOGS_DIR = '/tmp/meow_logs/'
+LOGS_DIR = os.path.join(PARENT_DIR, 'logs/')
 TRAIN_DIR = os.path.join(PARENT_DIR, 'train/')
 
 # Constants for inference directories and filepaths
