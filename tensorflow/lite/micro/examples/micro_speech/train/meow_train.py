@@ -96,8 +96,8 @@ BACKGROUND_VOLUME_RANGE = 0.1
 TIME_SHIFT_MS = 100.0
 
 DATA_URL = ''
-VALIDATION_PERCENTAGE = 10
-TESTING_PERCENTAGE = 10
+VALIDATION_PERCENTAGE = 20
+TESTING_PERCENTAGE = 20
 
 
 def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, SAMPLE_RATE, FEATURE_BIN_COUNT,
@@ -350,7 +350,9 @@ def main():
     --summaries_dir={LOGS_DIR} \
     --verbosity={VERBOSITY} \
     --eval_step_interval={EVAL_STEP_INTERVAL} \
-    --save_step_interval={SAVE_STEP_INTERVAL}'
+    --save_step_interval={SAVE_STEP_INTERVAL} \
+    --testing_percentage={TESTING_PERCENTAGE} \
+    --validation_percentage={VALIDATION_PERCENTAGE}'
   )
 
   if train_exit_status != 0:
