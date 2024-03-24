@@ -80,6 +80,7 @@ MODEL_TF = os.path.join(MODELS_DIR, 'meow.pb')
 MODEL_TFLITE = os.path.join(MODELS_DIR, 'meow.tflite')
 FLOAT_MODEL_TFLITE = os.path.join(MODELS_DIR, 'float_meow.tflite')
 MODEL_TFLITE_MICRO = os.path.join(MODELS_DIR, 'meow.cc')
+MODEL_TFLITE_MICRO_HEADER = os.path.join(MODELS_DIR, 'meow.h')
 SAVED_MODEL = os.path.join(MODELS_DIR, 'saved_model')
 
 QUANT_INPUT_MIN = 0.0
@@ -97,6 +98,84 @@ TIME_SHIFT_MS = 100.0
 DATA_URL = ''
 VALIDATION_PERCENTAGE = 10
 TESTING_PERCENTAGE = 10
+
+
+def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, SAMPLE_RATE, FEATURE_BIN_COUNT,
+                               WANTED_WORDS, output_file_path):
+  """
+  Generates a C++ header file content for model configuration, ensuring all values are explicitly
+  integers in Python before writing to the file. It includes #ifndef preprocessor directives
+  to prevent double inclusion.
+
+  Parameters:
+  - CLIP_DURATION_MS: Clip duration in milliseconds.
+  - WINDOW_SIZE_MS: Size of the window in milliseconds.
+  - WINDOW_STRIDE: Window stride in milliseconds.
+  - SAMPLE_RATE: Sample rate of the audio in Hz.
+  - FEATURE_BIN_COUNT: Number of feature bins.
+  - WANTED_WORDS: A string of comma-separated words to detect.
+  - output_file_path: The path to the file where the output will be written.
+  """
+  kFeatureCount = int(1 + ((CLIP_DURATION_MS - WINDOW_SIZE_MS) // WINDOW_STRIDE))
+  kMaxAudioSampleSize = int((SAMPLE_RATE / 1000) * WINDOW_SIZE_MS)
+  kCategoryCount = int(len(input_data.prepare_words_list(WANTED_WORDS.split(','))))
+  kFeatureSize = int(FEATURE_BIN_COUNT)
+  kFeatureElementCount = int(FEATURE_BIN_COUNT * kFeatureCount)
+  kFeatureStrideMs = int(WINDOW_STRIDE)
+  kFeatureDurationMs = int(WINDOW_SIZE_MS)
+  kAudioSampleFrequency = int(SAMPLE_RATE)
+
+  # Assuming list_to_c_array is adapted to handle integer conversion if necessary
+  kCategoryLabelsArray = list_to_c_array(input_data.prepare_words_list(WANTED_WORDS.split(',')),
+                                         "kCategoryLabels[kCategoryCount]",
+                                         "constexpr const char*")
+
+  header_guard = "MODEL_SETTINGS_H_"
+
+  with open(output_file_path, 'w') as file:
+    file_content = (
+      f"#ifndef {header_guard}\n"
+      f"#define {header_guard}\n"
+      "\n"
+      f"constexpr int kAudioSampleFrequency = {kAudioSampleFrequency};\n"
+      f"constexpr int kMaxAudioSampleSize = {kMaxAudioSampleSize};\n"
+      f"constexpr int kFeatureSize = {kFeatureSize};\n"
+      f"constexpr int kFeatureCount = {kFeatureCount};\n"
+      f"constexpr int kFeatureElementCount = {kFeatureElementCount}; // kFeatureSize * kFeatureCount\n"
+      f"constexpr int kFeatureStrideMs = {kFeatureStrideMs};\n"
+      f"constexpr int kFeatureDurationMs = {kFeatureDurationMs};\n"
+      "\n"
+      f"constexpr int kCategoryCount = {kCategoryCount};\n"
+      f"{kCategoryLabelsArray}\n"
+      "\n"
+      "#endif // " + header_guard + "\n"
+    )
+    file.write(file_content)
+
+
+def list_to_c_array(input_list, array_name="myArray", data_type="char*"):
+  """
+  Converts a list of strings to a C array declaration, removing underscores from the strings.
+
+  Args:
+  - input_list: List of strings to be included in the C array.
+  - array_name: Name of the C array.
+  - data_type: Data type of the C array.
+
+  Returns:
+  - A string representing the C array declaration.
+  """
+  # Removing underscores and quoting strings
+  formatted_items = [f'"{item.replace("_", "")}"' for item in input_list]
+
+  # Joining the formatted strings with commas
+  array_items = ", ".join(formatted_items)
+
+  # Creating the C array declaration string
+  c_array_declaration = f"{data_type} {array_name} = {{{array_items}}};"
+
+  return c_array_declaration
+
 
 
 def evaluate_multiclass_precision_recall(predictions, true_labels, plot_curves=False):
@@ -342,7 +421,7 @@ def main():
 
   metrics_dict = evaluate_multiclass_precision_recall(predictions, true_labels, plot_curves=True)
 
-  print(metrics_dict)
+  # print(metrics_dict)
 
   # Example: Analyzing average precision across classes
   average_precisions = {class_id: metrics['average_precision'] for class_id, metrics in metrics_dict.items()}
@@ -358,17 +437,15 @@ def main():
   # print(f"Replacing {REPLACE_TEXT} in {MODEL_TFLITE_MICRO}")
   # os.system(f"sed -i 's/{REPLACE_TEXT}/g_model/g' {MODEL_TFLITE_MICRO}")
 
-  # Calculating the number of feature vectors (kFeatureCount)
-  kFeatureCount = 1 + ((CLIP_DURATION_MS - WINDOW_SIZE_MS) // WINDOW_STRIDE)
-  kMaxAudioSampleSize = int((SAMPLE_RATE / 1000) * WINDOW_SIZE_MS)
-
-  print(f"kAudioSampleFrequency = {SAMPLE_RATE}\n"
-        f"kMaxAudioSampleSize = {kMaxAudioSampleSize}\n"
-        f"kFeatureSize = {FEATURE_BIN_COUNT}\n"
-        f"kFeatureCount = {kFeatureCount}\n"
-        f"kFeatureElementCount (kFeatureSize * kFeatureCount) = {FEATURE_BIN_COUNT * kFeatureCount}\n"
-        f"kFeatureStrideMs = {WINDOW_STRIDE}\n"
-        f"kFeatureDurationMs = {WINDOW_SIZE_MS}\n")
+  generate_model_header_file(
+    CLIP_DURATION_MS,
+    WINDOW_SIZE_MS,
+    WINDOW_STRIDE,
+    SAMPLE_RATE,
+    FEATURE_BIN_COUNT,
+    WANTED_WORDS,
+    MODEL_TFLITE_MICRO_HEADER
+  )
 
   # Mark the end time
   end_time = datetime.now()
