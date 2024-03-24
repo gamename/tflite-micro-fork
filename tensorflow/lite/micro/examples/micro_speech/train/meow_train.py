@@ -67,7 +67,7 @@ DATASET_DIR = '/tmp/meow-dataset/'
 PARENT_DIR = start_time.strftime('%Y-%m-%d_%H-%M-%S')
 os.makedirs(PARENT_DIR)
 
-LOGS_DIR = os.path.join(PARENT_DIR, 'logs/')
+LOGS_DIR = '/tmp/meow_logs/'
 TRAIN_DIR = os.path.join(PARENT_DIR, 'train/')
 
 # Constants for inference directories and filepaths
