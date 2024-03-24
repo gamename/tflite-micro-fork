@@ -235,7 +235,7 @@ def representative_dataset_gen(audio_processor, model_settings, sess):
 
   # Decide on the number of samples for the representative dataset
   # Use 100 samples or 10% of the dataset, whichever is smaller
-  num_representative_samples = min(100, total_test_samples // 10)
+  num_representative_samples = max(1, min(100, total_test_samples // 10))
 
   # Calculate the step size to evenly distribute the representative samples across the dataset
   step_size = max(1, total_test_samples // num_representative_samples)
