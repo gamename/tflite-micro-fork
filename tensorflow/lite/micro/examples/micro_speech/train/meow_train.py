@@ -29,8 +29,8 @@ WANTED_WORDS = "meow"
 # TRAINING_STEPS=12000,3000 and LEARNING_RATE=0.001,0.0001
 # will run 12,000 training loops in total, with a rate of 0.001 for the first
 # 8,000, and 0.0001 for the final 3,000.
-TRAINING_STEPS = "12000,3000"
-LEARNING_RATE = "0.001,0.0001"
+TRAINING_STEPS = "1000,200"
+LEARNING_RATE = "0.0001,0.0001"
 
 # Calculate the total number of steps, which is used to identify the checkpoint
 # file name.
@@ -58,8 +58,8 @@ MODEL_ARCHITECTURE = 'tiny_conv'  # Other options include: single_fc, conv,
 
 # Constants used during training only
 VERBOSITY = 'WARN'
-EVAL_STEP_INTERVAL = '1000'
-SAVE_STEP_INTERVAL = '1000'
+EVAL_STEP_INTERVAL = '100'
+SAVE_STEP_INTERVAL = '200'
 
 # Constants for training directories and filepaths
 DATASET_DIR = '/tmp/meow-dataset-03-24-24/'
@@ -334,6 +334,10 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
 
 def main():
   print("Training the model (this will take quite a while)...")
+
+  tensorboard_command = f'tensorboard --logdir {LOGS_DIR}'
+  print("Follow using Tensorboard:\n\t", tensorboard_command)
+
   train_exit_status = os.system(
     f'python {COMMAND_DIR}/train.py \
     --data_url= "" \
