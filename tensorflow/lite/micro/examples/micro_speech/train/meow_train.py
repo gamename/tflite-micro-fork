@@ -62,16 +62,14 @@ EVAL_STEP_INTERVAL = '100'
 SAVE_STEP_INTERVAL = '200'
 
 # Constants for training directories and filepaths
-DATASET_DIR = '/tmp/03-26-24/'
+DATASET_DIR = '/tmp/03-27-24/'
 
 PARENT_DIR = start_time.strftime('%Y-%m-%d_%H-%M-%S')
 os.makedirs(PARENT_DIR)
 
 LOGS_DIR = os.path.join(PARENT_DIR, 'logs/')
+PLOTS_DIR = os.path.join(PARENT_DIR, 'plots/')
 TRAIN_DIR = os.path.join(PARENT_DIR, 'train/')
-
-# Constants for inference directories and filepaths
-
 MODELS_DIR = os.path.join(PARENT_DIR, 'models/')
 
 if not os.path.exists(MODELS_DIR):
@@ -177,15 +175,18 @@ def list_to_c_array(input_list, array_name="myArray", data_type="char*"):
   return c_array_declaration
 
 
-
-def evaluate_multiclass_precision_recall(predictions, true_labels, plot_curves=False):
+def evaluate_multiclass_precision_recall(predictions, true_labels, class_labels, plot_curves=False, save_dir=None):
   """
-  Evaluates and optionally plots the Precision-Recall curve for each class in a multiclass setting.
+  Evaluates and optionally plots and saves the Precision-Recall curve for each class in a multiclass setting to a
+  specified directory,
+  with class names provided by the user.
 
   Parameters:
   - predictions: numpy array of shape (num_samples, num_classes) containing the prediction scores for each class.
   - true_labels: numpy array of shape (num_samples,) containing the true class labels.
-  - plot_curves: bool, if True, plot the Precision-Recall curve for each class.
+  - class_labels: list of strings, containing labels for each class.
+  - plot_curves: bool, if True, plot and save the Precision-Recall curve for each class.
+  - save_dir: str, directory where plots should be saved. If None, plots are not saved even if plot_curves is True.
 
   Returns:
   - A dictionary containing precision, recall, and average precision for each class.
@@ -203,14 +204,15 @@ def evaluate_multiclass_precision_recall(predictions, true_labels, plot_curves=F
     average_precision = average_precision_score(binary_true_labels, scores)
 
     # Store metrics
-    metrics_dict[i] = {
+    class_name = class_labels[i] if i < len(class_labels) else f'Class {i}'
+    metrics_dict[class_name] = {
       'precision': precision,
       'recall': recall,
       'average_precision': average_precision
     }
 
-    # Optionally plot Precision-Recall curve
-    if plot_curves:
+    # Optionally plot and save Precision-Recall curve
+    if plot_curves and save_dir is not None:
       plt.figure()
       plt.step(recall, precision, where='post')
       plt.fill_between(recall, precision, step='post', alpha=0.2, color='b')
@@ -218,8 +220,15 @@ def evaluate_multiclass_precision_recall(predictions, true_labels, plot_curves=F
       plt.ylabel('Precision')
       plt.ylim([0.0, 1.05])
       plt.xlim([0.0, 1.0])
-      plt.title(f'Class {i} Precision-Recall curve: AP={average_precision:0.2f}')
-      plt.show()
+      plt.title(f'{class_name} Precision-Recall curve: AP={average_precision:0.2f}')
+
+      # Check if save directory exists, create if not
+      if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+      # Save the figure
+      plt.savefig(os.path.join(save_dir, f'{class_name.replace(" ", "_")}_Precision_Recall_Curve.png'))
+      plt.close()
 
   return metrics_dict
 
@@ -425,18 +434,15 @@ def main():
   predictions, true_labels = collect_model_predictions(audio_processor, model_settings,
                                                        MODEL_TFLITE, model_type='Quantized')
 
-  metrics_dict = evaluate_multiclass_precision_recall(predictions, true_labels, plot_curves=True)
-
-  # print(metrics_dict)
+  metrics_dict = evaluate_multiclass_precision_recall(predictions, true_labels,
+                                                      input_data.prepare_words_list(WANTED_WORDS.split(',')),
+                                                      plot_curves=True, save_dir=PLOTS_DIR)
 
   # Example: Analyzing average precision across classes
   average_precisions = {class_id: metrics['average_precision'] for class_id, metrics in metrics_dict.items()}
   # Find the class with the lowest AP score
   worst_class_id = min(average_precisions, key=average_precisions.get)
   print(f"Class with the lowest AP score: {worst_class_id}, AP: {average_precisions[worst_class_id]}")
-
-  # This information could lead to further investigation and targeted improvement efforts for the worst-performing
-  # class.
 
   os.system(f'xxd -i {MODEL_TFLITE} > {MODEL_TFLITE_MICRO}')
   REPLACE_TEXT = MODEL_TFLITE.replace('/', '_').replace('.', '_')
