@@ -62,7 +62,7 @@ EVAL_STEP_INTERVAL = '100'
 SAVE_STEP_INTERVAL = '200'
 
 # Constants for training directories and filepaths
-DATASET_DIR = '/tmp/meow-dataset-03-24-24/'
+DATASET_DIR = '/tmp/03-26-24/'
 
 PARENT_DIR = start_time.strftime('%Y-%m-%d_%H-%M-%S')
 os.makedirs(PARENT_DIR)
