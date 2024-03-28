@@ -22,23 +22,21 @@ start_time = datetime.now()
 # audio data with no spoken words will be used to train a "silence" label.
 WANTED_WORDS = "meow"
 
+# There are hidden categories used for training.
+ALL_WORDS = set(input_data.prepare_words_list(WANTED_WORDS.split(',')))
+
 # The number of steps and learning rates can be specified as comma-separated
 # lists to define the rate at each stage. For example,
 # TRAINING_STEPS=12000,3000 and LEARNING_RATE=0.001,0.0001
 # will run 12,000 training loops in total, with a rate of 0.001 for the first
 # 8,000, and 0.0001 for the final 3,000.
-TRAINING_STEPS = "2000,400"
-LEARNING_RATE = "0.0001,0.0001"
+TRAINING_STEPS = "1000,200"
+LEARNING_RATE = "0.001,0.0001"
 
 # Calculate the total number of steps, which is used to identify the checkpoint
 # file name.
 TOTAL_STEPS = str(sum(map(lambda string: int(string), TRAINING_STEPS.split(","))))
 
-# Print the configuration to confirm it
-print("Training these words: %s" % WANTED_WORDS)
-print("Training steps in each stage: %s" % TRAINING_STEPS)
-print("Learning rate in each stage: %s" % LEARNING_RATE)
-print("Total number of training steps: %s" % TOTAL_STEPS)
 
 # Calculate the percentage of 'silence' and 'unknown' training samples required
 # to ensure that we have equal number of samples for each label.
@@ -95,10 +93,9 @@ BACKGROUND_VOLUME_RANGE = 0.1
 TIME_SHIFT_MS = 100.0
 
 DATA_URL = ''
-VALIDATION_PERCENTAGE = 20
-TESTING_PERCENTAGE = 20
+VALIDATION_PERCENTAGE = 25
+TESTING_PERCENTAGE = 25
 
-ALL_WORDS = input_data.prepare_words_list(WANTED_WORDS.split(','))
 
 def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, SAMPLE_RATE, FEATURE_BIN_COUNT,
                                WANTED_WORDS, output_file_path):
@@ -359,7 +356,6 @@ def save_confusion_matrix(predictions, true_labels, wanted_words, file_path):
   - wanted_words: A comma-separated string of class names corresponding to the model's outputs.
   - file_path: The path to save the confusion matrix plot.
   """
-
   # Assuming predictions are probability scores, get the predicted class indices
   predicted_labels = np.argmax(predictions, axis=1)
 
@@ -374,11 +370,18 @@ def save_confusion_matrix(predictions, true_labels, wanted_words, file_path):
   plt.xlabel('Predicted Labels')
 
   # Save the plot to the specified file path
-  plt.savefig(file_path)
+  plt.savefig(f"{file_path}/confusion_matrix.png")
   plt.close()  # Close the figure to free memory
 
 
 def main():
+  # Print the configuration to confirm it
+  print("Training these words: %s" % WANTED_WORDS)
+  print("Training steps in each stage: %s" % TRAINING_STEPS)
+  print("Learning rate in each stage: %s" % LEARNING_RATE)
+  print("Total number of training steps: %s" % TOTAL_STEPS)
+  print("All words: %s" % ALL_WORDS)
+
   print("Training the model (this will take quite a while)...")
 
   tensorboard_command = f'tensorboard --logdir {LOGS_DIR}'
@@ -441,7 +444,7 @@ def main():
     DATASET_DIR,
     SILENT_PERCENTAGE,
     UNKNOWN_PERCENTAGE,
-    ALL_WORDS,
+    WANTED_WORDS.split(','),
     VALIDATION_PERCENTAGE,
     TESTING_PERCENTAGE,
     model_settings,
@@ -474,7 +477,7 @@ def main():
   save_confusion_matrix(predictions, true_labels, ALL_WORDS, PLOTS_DIR)
 
   metrics_dict = evaluate_multiclass_precision_recall(predictions, true_labels,
-                                                      ALL_WORDS,
+                                                      input_data.prepare_words_list(WANTED_WORDS.split(',')),
                                                       plot_curves=True, save_dir=PLOTS_DIR)
 
   # Example: Analyzing average precision across classes
