@@ -2,8 +2,6 @@ import os
 import sys
 from datetime import datetime
 
-import matplotlib.pyplot as plt
-import numpy as np
 import tensorflow as tf
 from sklearn.metrics import precision_recall_curve, average_precision_score
 
@@ -29,8 +27,8 @@ WANTED_WORDS = "meow"
 # TRAINING_STEPS=12000,3000 and LEARNING_RATE=0.001,0.0001
 # will run 12,000 training loops in total, with a rate of 0.001 for the first
 # 8,000, and 0.0001 for the final 3,000.
-TRAINING_STEPS = "5000,1250"
-LEARNING_RATE = "0.001,0.0001"
+TRAINING_STEPS = "2000,400"
+LEARNING_RATE = "0.0001,0.0001"
 
 # Calculate the total number of steps, which is used to identify the checkpoint
 # file name.
@@ -58,8 +56,8 @@ MODEL_ARCHITECTURE = 'tiny_conv'  # Other options include: single_fc, conv,
 
 # Constants used during training only
 VERBOSITY = 'WARN'
-EVAL_STEP_INTERVAL = '1000'
-SAVE_STEP_INTERVAL = '1000'
+EVAL_STEP_INTERVAL = '100'
+SAVE_STEP_INTERVAL = '100'
 
 # Constants for training directories and filepaths
 DATASET_DIR = '/tmp/03-28-24/'
@@ -72,8 +70,11 @@ PLOTS_DIR = os.path.join(PARENT_DIR, 'plots/')
 TRAIN_DIR = os.path.join(PARENT_DIR, 'train/')
 MODELS_DIR = os.path.join(PARENT_DIR, 'models/')
 
-if not os.path.exists(MODELS_DIR):
-  os.mkdir(MODELS_DIR)
+os.makedirs(LOGS_DIR, exist_ok=True)
+os.makedirs(PLOTS_DIR, exist_ok=True)
+os.makedirs(TRAIN_DIR, exist_ok=True)
+os.makedirs(MODELS_DIR, exist_ok=True)
+
 MODEL_TF = os.path.join(MODELS_DIR, 'meow.pb')
 MODEL_TFLITE = os.path.join(MODELS_DIR, 'meow.tflite')
 FLOAT_MODEL_TFLITE = os.path.join(MODELS_DIR, 'float_meow.tflite')
@@ -94,9 +95,10 @@ BACKGROUND_VOLUME_RANGE = 0.1
 TIME_SHIFT_MS = 100.0
 
 DATA_URL = ''
-VALIDATION_PERCENTAGE = 10
-TESTING_PERCENTAGE = 10
+VALIDATION_PERCENTAGE = 20
+TESTING_PERCENTAGE = 20
 
+ALL_WORDS = input_data.prepare_words_list(WANTED_WORDS.split(','))
 
 def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, SAMPLE_RATE, FEATURE_BIN_COUNT,
                                WANTED_WORDS, output_file_path):
@@ -116,7 +118,7 @@ def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, 
   """
   kFeatureCount = int(1 + ((CLIP_DURATION_MS - WINDOW_SIZE_MS) // WINDOW_STRIDE))
   kMaxAudioSampleSize = int((SAMPLE_RATE / 1000) * WINDOW_SIZE_MS)
-  kCategoryCount = int(len(input_data.prepare_words_list(WANTED_WORDS.split(','))))
+  kCategoryCount = int(len(ALL_WORDS))
   kFeatureSize = int(FEATURE_BIN_COUNT)
   kFeatureElementCount = int(FEATURE_BIN_COUNT * kFeatureCount)
   kFeatureStrideMs = int(WINDOW_STRIDE)
@@ -124,7 +126,7 @@ def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, 
   kAudioSampleFrequency = int(SAMPLE_RATE)
 
   # Assuming list_to_c_array is adapted to handle integer conversion if necessary
-  kCategoryLabelsArray = list_to_c_array(input_data.prepare_words_list(WANTED_WORDS.split(',')),
+  kCategoryLabelsArray = list_to_c_array(ALL_WORDS,
                                          "kCategoryLabels[kCategoryCount]",
                                          "constexpr const char*")
 
@@ -341,6 +343,41 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
   return np.array(predictions), np.array(labels)
 
 
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+
+
+def save_confusion_matrix(predictions, true_labels, wanted_words, file_path):
+  """
+  Generates and saves a confusion matrix plot from predictions and true labels.
+
+  Parameters:
+  - predictions: The model's output probabilities for each class.
+  - true_labels: The true labels for the data.
+  - wanted_words: A comma-separated string of class names corresponding to the model's outputs.
+  - file_path: The path to save the confusion matrix plot.
+  """
+
+  # Assuming predictions are probability scores, get the predicted class indices
+  predicted_labels = np.argmax(predictions, axis=1)
+
+  # Generate the confusion matrix
+  cm = confusion_matrix(true_labels, predicted_labels)
+
+  # Plot the confusion matrix
+  plt.figure(figsize=(10, 7))
+  sns.heatmap(cm, annot=True, fmt="d", cmap='Blues', xticklabels=wanted_words, yticklabels=wanted_words)
+  plt.title('Confusion Matrix')
+  plt.ylabel('Actual Labels')
+  plt.xlabel('Predicted Labels')
+
+  # Save the plot to the specified file path
+  plt.savefig(file_path)
+  plt.close()  # Close the figure to free memory
+
+
 def main():
   print("Training the model (this will take quite a while)...")
 
@@ -390,7 +427,7 @@ def main():
     exit(freeze_exit_status)
 
   model_settings = models.prepare_model_settings(
-    len(input_data.prepare_words_list(WANTED_WORDS.split(','))),
+    len(ALL_WORDS),
     SAMPLE_RATE,
     CLIP_DURATION_MS,
     WINDOW_SIZE_MS,
@@ -404,7 +441,7 @@ def main():
     DATASET_DIR,
     SILENT_PERCENTAGE,
     UNKNOWN_PERCENTAGE,
-    WANTED_WORDS.split(','),
+    ALL_WORDS,
     VALIDATION_PERCENTAGE,
     TESTING_PERCENTAGE,
     model_settings,
@@ -434,8 +471,10 @@ def main():
   predictions, true_labels = collect_model_predictions(audio_processor, model_settings,
                                                        MODEL_TFLITE, model_type='Quantized')
 
+  save_confusion_matrix(predictions, true_labels, ALL_WORDS, PLOTS_DIR)
+
   metrics_dict = evaluate_multiclass_precision_recall(predictions, true_labels,
-                                                      input_data.prepare_words_list(WANTED_WORDS.split(',')),
+                                                      ALL_WORDS,
                                                       plot_curves=True, save_dir=PLOTS_DIR)
 
   # Example: Analyzing average precision across classes
