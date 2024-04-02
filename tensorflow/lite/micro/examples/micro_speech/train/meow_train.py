@@ -1,8 +1,11 @@
 import os
 import sys
+import zipfile
 from datetime import datetime
 
+import boto3
 import tensorflow as tf
+from botocore.exceptions import NoCredentialsError
 from sklearn.metrics import precision_recall_curve, average_precision_score
 
 COMMAND_DIR = (
@@ -13,6 +16,8 @@ COMMAND_DIR = (
 sys.path.append(COMMAND_DIR)
 import input_data
 import models
+
+AWS_S3_BUCKET_NAME = 'cat-doorbell-v3-meow-model-training-archive'
 
 # A comma-delimited list of the words you want to train for.
 # The options are: yes,no,up,down,left,right,on,off,stop,go
@@ -90,6 +95,52 @@ TIME_SHIFT_MS = 100.0
 DATA_URL = ''
 VALIDATION_PERCENTAGE = 25
 TESTING_PERCENTAGE = 25
+
+
+def zip_dir(directory, zip_name):
+  """Zips the specified directory."""
+  with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    for root, dirs, files in os.walk(directory):
+      for file in files:
+        zipf.write(os.path.join(root, file),
+                   os.path.relpath(os.path.join(root, file),
+                                   os.path.join(directory, '..')))
+
+
+def upload_to_s3(bucket_name, file_path, object_name=None):
+  """
+  Uploads a file to an S3 bucket.
+  :param bucket_name: Bucket to upload to.
+  :param file_path: File to upload.
+  :param object_name: S3 object name. If not specified, file_name is used.
+  :return: True if file was uploaded, else False.
+  """
+  if object_name is None:
+    object_name = os.path.basename(file_path)
+
+  # Upload the file
+  s3_client = boto3.client('s3')
+  try:
+    response = s3_client.upload_file(file_path, bucket_name, object_name)
+  except NoCredentialsError:
+    print("Credentials not available")
+    return False
+  return True
+
+
+def zip_and_upload(directory, bucket_name):
+  """
+  Zips a directory and uploads it to an S3 bucket.
+  :param directory: Directory to zip and upload.
+  :param bucket_name: S3 bucket to upload the zipped directory.
+  """
+  zip_name = f"{directory}.zip"
+  zip_dir(directory, zip_name)
+  upload_success = upload_to_s3(bucket_name, zip_name)
+  if upload_success:
+    print(f"Successfully uploaded {zip_name} to {bucket_name}")
+  else:
+    print(f"Failed to upload {zip_name} to {bucket_name}")
 
 
 def log_precision(metrics_dict):
@@ -520,6 +571,11 @@ def main():
   write_c_source_files()
 
   log_precision(metrics_dict)
+
+  print("Uploading the model to S3")
+  zip_and_upload(PARENT_DIR, AWS_S3_BUCKET_NAME)
+
+  print("Model uploaded to S3")
 
 
 if __name__ == '__main__':
