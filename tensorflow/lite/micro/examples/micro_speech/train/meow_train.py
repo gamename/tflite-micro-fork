@@ -14,8 +14,6 @@ sys.path.append(COMMAND_DIR)
 import input_data
 import models
 
-start_time = datetime.now()
-
 # A comma-delimited list of the words you want to train for.
 # The options are: yes,no,up,down,left,right,on,off,stop,go
 # All the other words will be used to train an "unknown" label and silent
@@ -23,7 +21,7 @@ start_time = datetime.now()
 WANTED_WORDS = "meow"
 
 # There are hidden categories used for training.
-ALL_WORDS = set(input_data.prepare_words_list(WANTED_WORDS.split(',')))
+ALL_WORDS = list(set(input_data.prepare_words_list(WANTED_WORDS.split(','))))
 
 # The number of steps and learning rates can be specified as comma-separated
 # lists to define the rate at each stage. For example,
@@ -37,12 +35,9 @@ LEARNING_RATE = "0.001,0.0001"
 # file name.
 TOTAL_STEPS = str(sum(map(lambda string: int(string), TRAINING_STEPS.split(","))))
 
-
 # Calculate the percentage of 'silence' and 'unknown' training samples required
 # to ensure that we have equal number of samples for each label.
-number_of_labels = WANTED_WORDS.count(',') + 1
-number_of_total_labels = number_of_labels + 2  # for 'silence' and 'unknown' label
-equal_percentage_of_training_samples = int(100.0 / (number_of_total_labels))
+equal_percentage_of_training_samples = int(100.0 / len(ALL_WORDS))
 SILENT_PERCENTAGE = equal_percentage_of_training_samples
 UNKNOWN_PERCENTAGE = equal_percentage_of_training_samples
 
@@ -60,7 +55,7 @@ SAVE_STEP_INTERVAL = '100'
 # Constants for training directories and filepaths
 DATASET_DIR = '/tmp/03-28-24/'
 
-PARENT_DIR = start_time.strftime('%Y-%m-%d_%H-%M-%S')
+PARENT_DIR = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 os.makedirs(PARENT_DIR)
 
 LOGS_DIR = os.path.join(PARENT_DIR, 'logs/')
@@ -95,6 +90,48 @@ TIME_SHIFT_MS = 100.0
 DATA_URL = ''
 VALIDATION_PERCENTAGE = 25
 TESTING_PERCENTAGE = 25
+
+
+def log_precision(metrics_dict):
+  # Example: Analyzing average precision across classes
+  average_precisions = {class_id: metrics['average_precision'] for class_id, metrics in metrics_dict.items()}
+
+  # Find the class with the lowest AP score
+  worst_class_id = min(average_precisions, key=average_precisions.get)
+  print(f"Class with the lowest AP score: {worst_class_id}, AP: {average_precisions[worst_class_id]}")
+
+
+def write_c_source_files():
+  os.system(f'xxd -i {MODEL_TFLITE} > {MODEL_TFLITE_MICRO}')
+  REPLACE_TEXT = MODEL_TFLITE.replace('/', '_').replace('.', '_')
+  # print(f"Replacing {REPLACE_TEXT} in {MODEL_TFLITE_MICRO}")
+  # os.system(f"sed -i 's/{REPLACE_TEXT}/g_model/g' {MODEL_TFLITE_MICRO}")
+
+  generate_model_header_file(
+    CLIP_DURATION_MS,
+    WINDOW_SIZE_MS,
+    WINDOW_STRIDE,
+    SAMPLE_RATE,
+    FEATURE_BIN_COUNT,
+    WANTED_WORDS,
+    MODEL_TFLITE_MICRO_HEADER
+  )
+
+
+def quantize(audio_processor, model_settings):
+  with tf.compat.v1.Session() as sess:
+    float_converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
+    float_tflite_model = float_converter.convert()
+    float_tflite_model_size = open(FLOAT_MODEL_TFLITE, "wb").write(float_tflite_model)
+    print("Float model is %d bytes" % float_tflite_model_size)
+    converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.inference_input_type = tf.int8
+    converter.inference_output_type = tf.int8
+    converter.representative_dataset = lambda: representative_dataset_gen(audio_processor, model_settings, sess)
+    tflite_model = converter.convert()
+    tflite_model_size = open(MODEL_TFLITE, "wb").write(tflite_model)
+    print("Quantized model is %d bytes" % tflite_model_size)
 
 
 def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, SAMPLE_RATE, FEATURE_BIN_COUNT,
@@ -451,55 +488,44 @@ def main():
     LOGS_DIR
   )
 
-  with tf.compat.v1.Session() as sess:
-    float_converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
-    float_tflite_model = float_converter.convert()
-    float_tflite_model_size = open(FLOAT_MODEL_TFLITE, "wb").write(float_tflite_model)
-    print("Float model is %d bytes" % float_tflite_model_size)
-    converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.inference_input_type = tf.int8
-    converter.inference_output_type = tf.int8
-    converter.representative_dataset = lambda: representative_dataset_gen(audio_processor, model_settings, sess)
-    tflite_model = converter.convert()
-    tflite_model_size = open(MODEL_TFLITE, "wb").write(tflite_model)
-    print("Quantized model is %d bytes" % tflite_model_size)
+  quantize(audio_processor, model_settings)
 
-  print("Compute float model accuracy")
-  run_tflite_inference(audio_processor, model_settings, FLOAT_MODEL_TFLITE)
+  print("Compute FLOAT model accuracy")
+  run_tflite_inference(audio_processor,
+                       model_settings,
+                       FLOAT_MODEL_TFLITE)
 
   print("Compute quantized model accuracy")
-  run_tflite_inference(audio_processor, model_settings, MODEL_TFLITE, model_type='Quantized')
+  run_tflite_inference(audio_processor,
+                       model_settings,
+                       MODEL_TFLITE,
+                       model_type='Quantized')
 
-  predictions, true_labels = collect_model_predictions(audio_processor, model_settings,
-                                                       MODEL_TFLITE, model_type='Quantized')
+  predictions, true_labels = collect_model_predictions(audio_processor,
+                                                       model_settings,
+                                                       MODEL_TFLITE,
+                                                       model_type='Quantized')
 
-  save_confusion_matrix(predictions, true_labels, ALL_WORDS, PLOTS_DIR)
+  save_confusion_matrix(predictions,
+                        true_labels,
+                        ALL_WORDS,
+                        PLOTS_DIR)
 
-  metrics_dict = evaluate_multiclass_precision_recall(predictions, true_labels,
+  metrics_dict = evaluate_multiclass_precision_recall(predictions,
+                                                      true_labels,
                                                       input_data.prepare_words_list(WANTED_WORDS.split(',')),
-                                                      plot_curves=True, save_dir=PLOTS_DIR)
+                                                      plot_curves=True,
+                                                      save_dir=PLOTS_DIR)
 
-  # Example: Analyzing average precision across classes
-  average_precisions = {class_id: metrics['average_precision'] for class_id, metrics in metrics_dict.items()}
-  # Find the class with the lowest AP score
-  worst_class_id = min(average_precisions, key=average_precisions.get)
-  print(f"Class with the lowest AP score: {worst_class_id}, AP: {average_precisions[worst_class_id]}")
+  write_c_source_files()
 
-  os.system(f'xxd -i {MODEL_TFLITE} > {MODEL_TFLITE_MICRO}')
-  REPLACE_TEXT = MODEL_TFLITE.replace('/', '_').replace('.', '_')
-  # print(f"Replacing {REPLACE_TEXT} in {MODEL_TFLITE_MICRO}")
-  # os.system(f"sed -i 's/{REPLACE_TEXT}/g_model/g' {MODEL_TFLITE_MICRO}")
+  log_precision(metrics_dict)
 
-  generate_model_header_file(
-    CLIP_DURATION_MS,
-    WINDOW_SIZE_MS,
-    WINDOW_STRIDE,
-    SAMPLE_RATE,
-    FEATURE_BIN_COUNT,
-    WANTED_WORDS,
-    MODEL_TFLITE_MICRO_HEADER
-  )
+
+if __name__ == '__main__':
+  start_time = datetime.now()
+
+  main()
 
   # Mark the end time
   end_time = datetime.now()
@@ -512,7 +538,3 @@ def main():
   execution_minutes = remainder // 60
 
   print(f"Total execution time: {execution_hours} hours and {execution_minutes} minutes")
-
-
-if __name__ == '__main__':
-  main()
