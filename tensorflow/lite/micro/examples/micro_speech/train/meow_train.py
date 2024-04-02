@@ -1,3 +1,6 @@
+"""
+
+"""
 import os
 import sys
 import zipfile
@@ -97,6 +100,12 @@ VALIDATION_PERCENTAGE = 25
 TESTING_PERCENTAGE = 25
 
 
+def ensure_dir(directory):
+  """Ensure the directory exists, and if not, create it."""
+  if not os.path.exists(directory):
+    os.makedirs(directory)
+
+
 def zip_dir(directory, zip_name):
   """Zips the specified directory."""
   with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -105,6 +114,70 @@ def zip_dir(directory, zip_name):
         zipf.write(os.path.join(root, file),
                    os.path.relpath(os.path.join(root, file),
                                    os.path.join(directory, '..')))
+
+
+def plot_average_precision(metrics_dict, plots_dir):
+  classes = list(metrics_dict.keys())
+  average_precisions = [metrics['average_precision'] for metrics in metrics_dict.values()]
+
+  plt.figure(figsize=(10, 6))
+  sns.barplot(x=classes, y=average_precisions, palette='viridis')
+  plt.xlabel('Classes')
+  plt.ylabel('Average Precision (AP)')
+  plt.title('Average Precision per Class')
+  plt.xticks(rotation=45)
+  plt.tight_layout()
+
+  ensure_dir(plots_dir)
+  plt.savefig(os.path.join(plots_dir, 'average_precision_per_class.png'))
+  plt.close()
+
+
+def plot_precision_recall(metrics_dict, plots_dir):
+  classes = list(metrics_dict.keys())
+  precisions = [metrics['precision'][0] for metrics in metrics_dict.values()]  # Taking the last precision value
+  recalls = [metrics['recall'][0] for metrics in metrics_dict.values()]  # Taking the last recall value
+
+  x = np.arange(len(classes))
+  width = 0.35
+
+  fig, ax = plt.subplots(figsize=(12, 6))
+  bars1 = ax.bar(x - width / 2, precisions, width, label='Precision', color='skyblue')
+  bars2 = ax.bar(x + width / 2, recalls, width, label='Recall', color='orange')
+
+  ax.set_xlabel('Classes')
+  ax.set_ylabel('Scores')
+  ax.set_title('Precision and Recall per Class')
+  ax.set_xticks(x)
+  ax.set_xticklabels(classes, rotation=45)
+  ax.legend()
+  plt.tight_layout()
+
+  ensure_dir(plots_dir)
+  plt.savefig(os.path.join(plots_dir, 'precision_recall_per_class.png'))
+  plt.close()
+
+
+def plot_f1_scores(metrics_dict, plots_dir):
+  classes = list(metrics_dict.keys())
+  f1_scores = []
+  for metrics in metrics_dict.values():
+    precision = metrics['precision'][0]  # Taking the last precision value
+    recall = metrics['recall'][0]  # Taking the last recall value
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    f1_scores.append(f1_score)
+
+  plt.figure(figsize=(10, 6))
+  sns.barplot(x=classes, y=f1_scores, palette='mako')
+  plt.xlabel('Classes')
+  plt.ylabel('F1 Score')
+  plt.title('F1 Score per Class')
+  plt.xticks(rotation=45)
+  plt.tight_layout()
+
+  ensure_dir(plots_dir)
+  plt.savefig(os.path.join(plots_dir, 'f1_scores_per_class.png'))
+  plt.close()
 
 
 def upload_to_s3(bucket_name, file_path, object_name=None):
@@ -568,9 +641,11 @@ def main():
                                                       plot_curves=True,
                                                       save_dir=PLOTS_DIR)
 
-  write_c_source_files()
+  plot_average_precision(metrics_dict, PLOTS_DIR)
+  plot_precision_recall(metrics_dict, PLOTS_DIR)
+  plot_f1_scores(metrics_dict, PLOTS_DIR)
 
-  log_precision(metrics_dict)
+  write_c_source_files()
 
   print("Uploading the model to S3")
   zip_and_upload(PARENT_DIR, AWS_S3_BUCKET_NAME)
