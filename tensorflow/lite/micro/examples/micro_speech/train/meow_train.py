@@ -21,8 +21,6 @@ sys.path.append(COMMAND_DIR)
 import input_data
 import models
 
-AWS_S3_BUCKET_NAME = 'cat-doorbell-v3-meow-model-training-archive'
-
 # A comma-delimited list of the words you want to train for.
 # The options are: yes,no,up,down,left,right,on,off,stop,go
 # All the other words will be used to train an "unknown" label and silent
