@@ -3,12 +3,13 @@
 """
 import os
 import sys
-import zipfile
 from datetime import datetime
 
-import boto3
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 import tensorflow as tf
-from botocore.exceptions import NoCredentialsError
+from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_curve, average_precision_score
 
 COMMAND_DIR = (
@@ -100,20 +101,29 @@ VALIDATION_PERCENTAGE = 25
 TESTING_PERCENTAGE = 25
 
 
+def plot_results(predictions, true_labels):
+  save_confusion_matrix(predictions,
+                        true_labels,
+                        ALL_WORDS,
+                        PLOTS_DIR)
+
+  metrics_dict = evaluate_multiclass_precision_recall(predictions,
+                                                      true_labels,
+                                                      ALL_WORDS,
+                                                      plot_curves=True,
+                                                      save_dir=PLOTS_DIR)
+
+  plot_average_precision(metrics_dict, PLOTS_DIR)
+
+  plot_precision_recall(metrics_dict, PLOTS_DIR)
+
+  plot_f1_scores(metrics_dict, PLOTS_DIR)
+
+
 def ensure_dir(directory):
   """Ensure the directory exists, and if not, create it."""
   if not os.path.exists(directory):
     os.makedirs(directory)
-
-
-def zip_dir(directory, zip_name):
-  """Zips the specified directory."""
-  with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
-    for root, dirs, files in os.walk(directory):
-      for file in files:
-        zipf.write(os.path.join(root, file),
-                   os.path.relpath(os.path.join(root, file),
-                                   os.path.join(directory, '..')))
 
 
 def plot_average_precision(metrics_dict, plots_dir):
@@ -178,42 +188,6 @@ def plot_f1_scores(metrics_dict, plots_dir):
   ensure_dir(plots_dir)
   plt.savefig(os.path.join(plots_dir, 'f1_scores_per_class.png'))
   plt.close()
-
-
-def upload_to_s3(bucket_name, file_path, object_name=None):
-  """
-  Uploads a file to an S3 bucket.
-  :param bucket_name: Bucket to upload to.
-  :param file_path: File to upload.
-  :param object_name: S3 object name. If not specified, file_name is used.
-  :return: True if file was uploaded, else False.
-  """
-  if object_name is None:
-    object_name = os.path.basename(file_path)
-
-  # Upload the file
-  s3_client = boto3.client('s3')
-  try:
-    response = s3_client.upload_file(file_path, bucket_name, object_name)
-  except NoCredentialsError:
-    print("Credentials not available")
-    return False
-  return True
-
-
-def zip_and_upload(directory, bucket_name):
-  """
-  Zips a directory and uploads it to an S3 bucket.
-  :param directory: Directory to zip and upload.
-  :param bucket_name: S3 bucket to upload the zipped directory.
-  """
-  zip_name = f"{directory}.zip"
-  zip_dir(directory, zip_name)
-  upload_success = upload_to_s3(bucket_name, zip_name)
-  if upload_success:
-    print(f"Successfully uploaded {zip_name} to {bucket_name}")
-  else:
-    print(f"Failed to upload {zip_name} to {bucket_name}")
 
 
 def log_precision(metrics_dict):
@@ -501,12 +475,6 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
   return np.array(predictions), np.array(labels)
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import confusion_matrix
-
-
 def save_confusion_matrix(predictions, true_labels, wanted_words, file_path):
   """
   Generates and saves a confusion matrix plot from predictions and true labels.
@@ -548,26 +516,24 @@ def main():
   tensorboard_command = f'tensorboard --logdir {LOGS_DIR}'
   print("Follow using Tensorboard:\n\t", tensorboard_command)
 
-  train_exit_status = os.system(
-    f'python {COMMAND_DIR}/train.py \
-    --data_url= "" \
-    --data_dir={DATASET_DIR} \
-    --wanted_words={WANTED_WORDS} \
-    --silence_percentage={SILENT_PERCENTAGE} \
-    --unknown_percentage={UNKNOWN_PERCENTAGE} \
-    --preprocess={PREPROCESS} \
-    --window_stride={WINDOW_STRIDE} \
-    --model_architecture={MODEL_ARCHITECTURE} \
-    --how_many_training_steps={TRAINING_STEPS} \
-    --learning_rate={LEARNING_RATE} \
-    --train_dir={TRAIN_DIR} \
-    --summaries_dir={LOGS_DIR} \
-    --verbosity={VERBOSITY} \
-    --eval_step_interval={EVAL_STEP_INTERVAL} \
-    --save_step_interval={SAVE_STEP_INTERVAL} \
-    --testing_percentage={TESTING_PERCENTAGE} \
-    --validation_percentage={VALIDATION_PERCENTAGE}'
-  )
+  train_exit_status = os.system(f'python {COMMAND_DIR}/train.py '
+                                f'--data_url= ""'
+                                f' --data_dir={DATASET_DIR}'
+                                f' --wanted_words={WANTED_WORDS}'
+                                f' --silence_percentage={SILENT_PERCENTAGE}'
+                                f' --unknown_percentage={UNKNOWN_PERCENTAGE}'
+                                f' --preprocess={PREPROCESS}'
+                                f' --window_stride={WINDOW_STRIDE}'
+                                f' --model_architecture={MODEL_ARCHITECTURE}'
+                                f' --how_many_training_steps={TRAINING_STEPS}'
+                                f' --learning_rate={LEARNING_RATE}'
+                                f' --train_dir={TRAIN_DIR}'
+                                f' --summaries_dir={LOGS_DIR}'
+                                f' --verbosity={VERBOSITY}'
+                                f' --eval_step_interval={EVAL_STEP_INTERVAL}'
+                                f' --save_step_interval={SAVE_STEP_INTERVAL}'
+                                f' --testing_percentage={TESTING_PERCENTAGE}'
+                                f' --validation_percentage={VALIDATION_PERCENTAGE}')
 
   if train_exit_status != 0:
     print("Training failed")
@@ -575,42 +541,36 @@ def main():
 
   print("Freezing the model")
 
-  freeze_exit_status = os.system(
-    f'python {COMMAND_DIR}/freeze.py \
-    --wanted_words={WANTED_WORDS} \
-    --window_stride_ms={WINDOW_STRIDE} \
-    --preprocess={PREPROCESS} \
-    --model_architecture={MODEL_ARCHITECTURE} \
-    --start_checkpoint={TRAIN_DIR}{MODEL_ARCHITECTURE}.ckpt-{TOTAL_STEPS} \
-    --save_format=saved_model \
-    --output_file={SAVED_MODEL}'
-  )
+  freeze_exit_status = os.system(f'python {COMMAND_DIR}/freeze.py'
+                                 f' --wanted_words={WANTED_WORDS}'
+                                 f' --window_stride_ms={WINDOW_STRIDE}'
+                                 f' --preprocess={PREPROCESS}'
+                                 f' --model_architecture={MODEL_ARCHITECTURE}'
+                                 f' --start_checkpoint={TRAIN_DIR}{MODEL_ARCHITECTURE}.ckpt-{TOTAL_STEPS}'
+                                 f' --save_format=saved_model'
+                                 f' --output_file={SAVED_MODEL}')
 
   if freeze_exit_status != 0:
     print("Freezing failed")
     exit(freeze_exit_status)
 
-  model_settings = models.prepare_model_settings(
-    len(ALL_WORDS),
-    SAMPLE_RATE,
-    CLIP_DURATION_MS,
-    WINDOW_SIZE_MS,
-    WINDOW_STRIDE,
-    FEATURE_BIN_COUNT,
-    PREPROCESS
-  )
+  model_settings = models.prepare_model_settings(len(ALL_WORDS),
+                                                 SAMPLE_RATE,
+                                                 CLIP_DURATION_MS,
+                                                 WINDOW_SIZE_MS,
+                                                 WINDOW_STRIDE,
+                                                 FEATURE_BIN_COUNT,
+                                                 PREPROCESS)
 
-  audio_processor = input_data.AudioProcessor(
-    DATA_URL,
-    DATASET_DIR,
-    SILENT_PERCENTAGE,
-    UNKNOWN_PERCENTAGE,
-    WANTED_WORDS.split(','),
-    VALIDATION_PERCENTAGE,
-    TESTING_PERCENTAGE,
-    model_settings,
-    LOGS_DIR
-  )
+  audio_processor = input_data.AudioProcessor(DATA_URL,
+                                              DATASET_DIR,
+                                              SILENT_PERCENTAGE,
+                                              UNKNOWN_PERCENTAGE,
+                                              ALL_WORDS,
+                                              VALIDATION_PERCENTAGE,
+                                              TESTING_PERCENTAGE,
+                                              model_settings,
+                                              LOGS_DIR)
 
   quantize(audio_processor, model_settings)
 
@@ -629,28 +589,9 @@ def main():
                                                        model_settings,
                                                        MODEL_TFLITE,
                                                        model_type='Quantized')
-
-  save_confusion_matrix(predictions,
-                        true_labels,
-                        ALL_WORDS,
-                        PLOTS_DIR)
-
-  metrics_dict = evaluate_multiclass_precision_recall(predictions,
-                                                      true_labels,
-                                                      input_data.prepare_words_list(WANTED_WORDS.split(',')),
-                                                      plot_curves=True,
-                                                      save_dir=PLOTS_DIR)
-
-  plot_average_precision(metrics_dict, PLOTS_DIR)
-  plot_precision_recall(metrics_dict, PLOTS_DIR)
-  plot_f1_scores(metrics_dict, PLOTS_DIR)
+  plot_results(predictions, true_labels)
 
   write_c_source_files()
-
-  print("Uploading the model to S3")
-  zip_and_upload(PARENT_DIR, AWS_S3_BUCKET_NAME)
-
-  print("Model uploaded to S3")
 
 
 if __name__ == '__main__':
