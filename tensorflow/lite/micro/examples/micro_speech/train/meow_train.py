@@ -101,6 +101,12 @@ VALIDATION_PERCENTAGE = 25
 TESTING_PERCENTAGE = 25
 
 
+def print_mean_std(sample, sample_index):
+  mean = np.mean(sample)
+  std = np.std(sample)
+  print(f"Sample {sample_index}: Mean = {mean:.2f}, Std Dev = {std:.2f}")
+
+
 def plot_results(predictions, true_labels):
   save_confusion_matrix(predictions,
                         true_labels,
@@ -467,6 +473,7 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
   # Collect predictions and true labels
   for i in range(len(test_data)):
     interpreter.set_tensor(input_details["index"], test_data[i])
+    print_mean_std(test_data[i], i)
     interpreter.invoke()
     output = interpreter.get_tensor(output_details["index"])[0]
     predictions.append(output)
