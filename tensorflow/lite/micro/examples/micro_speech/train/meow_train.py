@@ -35,7 +35,7 @@ ALL_WORDS = list(set(input_data.prepare_words_list(WANTED_WORDS.split(','))))
 # TRAINING_STEPS=12000,3000 and LEARNING_RATE=0.001,0.0001
 # will run 12,000 training loops in total, with a rate of 0.001 for the first
 # 8,000, and 0.0001 for the final 3,000.
-TRAINING_STEPS = "1000,200"
+TRAINING_STEPS = "12000,3000"
 LEARNING_RATE = "0.001,0.0001"
 
 # Calculate the total number of steps, which is used to identify the checkpoint
@@ -56,13 +56,15 @@ MODEL_ARCHITECTURE = 'tiny_conv'  # Other options include: single_fc, conv,
 
 # Constants used during training only
 VERBOSITY = 'WARN'
-EVAL_STEP_INTERVAL = '100'
-SAVE_STEP_INTERVAL = '100'
+EVAL_STEP_INTERVAL = '1000'
+SAVE_STEP_INTERVAL = '1000'
 
 # Constants for training directories and filepaths
-DATASET_DIR = '/tmp/03-28-24/'
+DATASET_DIR = '/tmp/dataset-2024-04-05-04-14-29/'
 
-PARENT_DIR = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+datetime_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+PARENT_DIR = f"meow-train-{datetime_string}"
+
 os.makedirs(PARENT_DIR)
 
 LOGS_DIR = os.path.join(PARENT_DIR, 'logs/')
