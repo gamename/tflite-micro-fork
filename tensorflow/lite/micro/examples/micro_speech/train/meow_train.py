@@ -13,8 +13,8 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_curve, average_precision_score
 
 COMMAND_DIR = (
-  '/Users/tennis/src/tflite-micro-fork'
-  '/tensorflow/lite/micro/examples/micro_speech/tensorflow/tensorflow/examples/speech_commands'
+  '/Users/tennis/'
+  'esp/tensorflow/tensorflow/examples/speech_commands'
 )
 
 sys.path.append(COMMAND_DIR)
@@ -50,7 +50,6 @@ UNKNOWN_PERCENTAGE = equal_percentage_of_training_samples
 
 # Constants which are shared during training and inference
 PREPROCESS = 'micro'
-WINDOW_STRIDE = 20
 MODEL_ARCHITECTURE = 'tiny_conv'  # Other options include: single_fc, conv,
 # low_latency_conv, low_latency_svdf, tiny_embedding_conv
 
@@ -90,7 +89,8 @@ QUANT_INPUT_RANGE = QUANT_INPUT_MAX - QUANT_INPUT_MIN
 
 SAMPLE_RATE = 16000
 CLIP_DURATION_MS = 1000
-WINDOW_SIZE_MS = 30.0
+WINDOW_STRIDE_MS = 20
+WINDOW_SIZE_MS = 30
 FEATURE_BIN_COUNT = 40
 BACKGROUND_FREQUENCY = 0.8
 BACKGROUND_VOLUME_RANGE = 0.1
@@ -99,6 +99,14 @@ TIME_SHIFT_MS = 100.0
 DATA_URL = ''
 VALIDATION_PERCENTAGE = 25
 TESTING_PERCENTAGE = 25
+
+desired_samples = int(SAMPLE_RATE * CLIP_DURATION_MS / 1000)
+window_size_samples = int(SAMPLE_RATE * WINDOW_SIZE_MS / 1000)
+window_stride_samples = int(SAMPLE_RATE * WINDOW_STRIDE_MS / 1000)
+length_minus_window = (desired_samples - window_size_samples)
+# Adjusting the calculation here to more accurately reflect the handling of the last window
+spectrogram_length = 1 + int(length_minus_window / window_stride_samples) if length_minus_window >= 0 else 0
+TOTAL_FEATURE_DIMENSION = FEATURE_BIN_COUNT * spectrogram_length
 
 
 def print_mean_std(sample, sample_index):
@@ -214,7 +222,7 @@ def write_c_source_files():
   generate_model_header_file(
     CLIP_DURATION_MS,
     WINDOW_SIZE_MS,
-    WINDOW_STRIDE,
+    WINDOW_STRIDE_MS,
     SAMPLE_RATE,
     FEATURE_BIN_COUNT,
     WANTED_WORDS,
@@ -228,17 +236,31 @@ def quantize(audio_processor, model_settings):
     float_tflite_model = float_converter.convert()
     float_tflite_model_size = open(FLOAT_MODEL_TFLITE, "wb").write(float_tflite_model)
     print("Float model is %d bytes" % float_tflite_model_size)
+
     converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.inference_input_type = tf.int8
     converter.inference_output_type = tf.int8
-    converter.representative_dataset = lambda: representative_dataset_gen(audio_processor, model_settings, sess)
+
+    def representative_dataset_gen():
+      # Use could use 100 samples or 10% of the dataset, whichever is smaller - we assume 100 is smaller
+      for i in range(100):
+        data, _ = audio_processor.get_data(1, i * 1, model_settings,
+                                           BACKGROUND_FREQUENCY,
+                                           BACKGROUND_VOLUME_RANGE,
+                                           TIME_SHIFT_MS,
+                                           'testing',
+                                           sess)
+        flattened_data = np.array(data.flatten(), dtype=np.float32).reshape(1, TOTAL_FEATURE_DIMENSION)
+        yield [flattened_data]
+
+    converter.representative_dataset = representative_dataset_gen
     tflite_model = converter.convert()
     tflite_model_size = open(MODEL_TFLITE, "wb").write(tflite_model)
     print("Quantized model is %d bytes" % tflite_model_size)
 
 
-def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, SAMPLE_RATE, FEATURE_BIN_COUNT,
+def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE_MS, SAMPLE_RATE, FEATURE_BIN_COUNT,
                                WANTED_WORDS, output_file_path):
   """
   Generates a C++ header file content for model configuration, ensuring all values are explicitly
@@ -248,18 +270,18 @@ def generate_model_header_file(CLIP_DURATION_MS, WINDOW_SIZE_MS, WINDOW_STRIDE, 
   Parameters:
   - CLIP_DURATION_MS: Clip duration in milliseconds.
   - WINDOW_SIZE_MS: Size of the window in milliseconds.
-  - WINDOW_STRIDE: Window stride in milliseconds.
+  - WINDOW_STRIDE_MS: Window stride in milliseconds.
   - SAMPLE_RATE: Sample rate of the audio in Hz.
   - FEATURE_BIN_COUNT: Number of feature bins.
   - WANTED_WORDS: A string of comma-separated words to detect.
   - output_file_path: The path to the file where the output will be written.
   """
-  kFeatureCount = int(1 + ((CLIP_DURATION_MS - WINDOW_SIZE_MS) // WINDOW_STRIDE))
+  kFeatureCount = int(1 + ((CLIP_DURATION_MS - WINDOW_SIZE_MS) // WINDOW_STRIDE_MS))
   kMaxAudioSampleSize = int((SAMPLE_RATE / 1000) * WINDOW_SIZE_MS)
   kCategoryCount = int(len(ALL_WORDS))
   kFeatureSize = int(FEATURE_BIN_COUNT)
   kFeatureElementCount = int(FEATURE_BIN_COUNT * kFeatureCount)
-  kFeatureStrideMs = int(WINDOW_STRIDE)
+  kFeatureStrideMs = int(WINDOW_STRIDE_MS)
   kFeatureDurationMs = int(WINDOW_SIZE_MS)
   kAudioSampleFrequency = int(SAMPLE_RATE)
 
@@ -373,29 +395,6 @@ def evaluate_multiclass_precision_recall(predictions, true_labels, class_labels,
   return metrics_dict
 
 
-def representative_dataset_gen(audio_processor, model_settings, sess):
-  # Assume we have a method to get the total number of test samples
-  total_test_samples = len(audio_processor.get_data(-1, 0,
-                                                    model_settings,
-                                                    BACKGROUND_FREQUENCY,
-                                                    BACKGROUND_VOLUME_RANGE,
-                                                    TIME_SHIFT_MS,
-                                                    'testing', sess)[0])
-
-  # Decide on the number of samples for the representative dataset
-  # Use 100 samples or 10% of the dataset, whichever is smaller
-  num_representative_samples = max(1, min(100, total_test_samples // 10))
-
-  # Calculate the step size to evenly distribute the representative samples across the dataset
-  step_size = max(1, total_test_samples // num_representative_samples)
-
-  for i in range(0, total_test_samples, step_size):
-    data, _ = audio_processor.get_data(1, i, model_settings, BACKGROUND_FREQUENCY, BACKGROUND_VOLUME_RANGE,
-                                       TIME_SHIFT_MS, 'testing', sess)
-    flattened_data = np.array(data.flatten(), dtype=np.float32).reshape(1, 1960)
-    yield [flattened_data]
-
-
 def run_tflite_inference(audio_processor, model_settings, tflite_model_path, model_type="Float"):
   # Load test data
   np.random.seed(0)  # set random seed for reproducible test results.
@@ -412,6 +411,9 @@ def run_tflite_inference(audio_processor, model_settings, tflite_model_path, mod
 
   input_details = interpreter.get_input_details()[0]
   output_details = interpreter.get_output_details()[0]
+
+  print("Input tensor details:", input_details)
+  print("Output tensor details:", output_details)
 
   # For quantized models, manually quantize the input data from float to integer
   if model_type == "Quantized":
@@ -517,6 +519,7 @@ def main():
   print("Learning rate in each stage: %s" % LEARNING_RATE)
   print("Total number of training steps: %s" % TOTAL_STEPS)
   print("All words: %s" % ALL_WORDS)
+  print("Total Feature Vector Dimension:", TOTAL_FEATURE_DIMENSION)
 
   print("Training the model (this will take quite a while)...")
 
@@ -530,7 +533,7 @@ def main():
                                 f' --silence_percentage={SILENT_PERCENTAGE}'
                                 f' --unknown_percentage={UNKNOWN_PERCENTAGE}'
                                 f' --preprocess={PREPROCESS}'
-                                f' --window_stride={WINDOW_STRIDE}'
+                                f' --window_stride={WINDOW_STRIDE_MS}'
                                 f' --model_architecture={MODEL_ARCHITECTURE}'
                                 f' --how_many_training_steps={TRAINING_STEPS}'
                                 f' --learning_rate={LEARNING_RATE}'
@@ -550,12 +553,13 @@ def main():
 
   freeze_exit_status = os.system(f'python {COMMAND_DIR}/freeze.py'
                                  f' --wanted_words={WANTED_WORDS}'
-                                 f' --window_stride_ms={WINDOW_STRIDE}'
+                                 f' --window_stride_ms={WINDOW_STRIDE_MS}'
                                  f' --preprocess={PREPROCESS}'
                                  f' --model_architecture={MODEL_ARCHITECTURE}'
                                  f' --start_checkpoint={TRAIN_DIR}{MODEL_ARCHITECTURE}.ckpt-{TOTAL_STEPS}'
                                  f' --save_format=saved_model'
-                                 f' --output_file={SAVED_MODEL}')
+                                 f' --output_file={SAVED_MODEL}'
+                                 f' --how_many_training_steps={TRAINING_STEPS}')
 
   if freeze_exit_status != 0:
     print("Freezing failed")
@@ -565,7 +569,7 @@ def main():
                                                  SAMPLE_RATE,
                                                  CLIP_DURATION_MS,
                                                  WINDOW_SIZE_MS,
-                                                 WINDOW_STRIDE,
+                                                 WINDOW_STRIDE_MS,
                                                  FEATURE_BIN_COUNT,
                                                  PREPROCESS)
 
