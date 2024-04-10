@@ -228,6 +228,19 @@ py_binary(
     ],
 )
 
+py_binary(
+    name = "meow_evaluate",
+    srcs = ["meow_evaluate.py"],
+    data = [
+        ":models_tflite",
+    ],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [
+        ":audio_preprocessor",
+    ],
+)
+
 py_test(
     name = "evaluate_test",
     srcs = ["evaluate_test.py"],
