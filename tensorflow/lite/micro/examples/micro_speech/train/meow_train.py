@@ -62,7 +62,7 @@ SAVE_STEP_INTERVAL = '1000'
 DATASET_DIR = '/tmp/dataset-2024-04-05-04-14-29/'
 
 datetime_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-PARENT_DIR = f"meow-train-{datetime_string}"
+PARENT_DIR = f"meow-training-{datetime_string}"
 
 os.makedirs(PARENT_DIR)
 
