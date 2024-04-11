@@ -115,12 +115,6 @@ def print_mean_std(sample, sample_index):
   print(f"Sample {sample_index}: Mean = {mean:.2f}, Std Dev = {std:.2f}")
 
 
-def ensure_dir(directory):
-  """Ensure the directory exists, and if not, create it."""
-  if not os.path.exists(directory):
-    os.makedirs(directory)
-
-
 def plot_average_precision(metrics_dict, plots_dir):
   classes = list(metrics_dict.keys())
   average_precisions = [metrics['average_precision'] for metrics in metrics_dict.values()]
@@ -183,15 +177,6 @@ def plot_f1_scores(metrics_dict, plots_dir):
   ensure_dir(plots_dir)
   plt.savefig(os.path.join(plots_dir, 'f1_scores_per_class.png'))
   plt.close()
-
-
-def log_precision(metrics_dict):
-  # Example: Analyzing average precision across classes
-  average_precisions = {class_id: metrics['average_precision'] for class_id, metrics in metrics_dict.items()}
-
-  # Find the class with the lowest AP score
-  worst_class_id = min(average_precisions, key=average_precisions.get)
-  print(f"Class with the lowest AP score: {worst_class_id}, AP: {average_precisions[worst_class_id]}")
 
 
 def write_c_source_files():
@@ -330,54 +315,6 @@ def generate_metrics_dictionary(predictions, true_labels, class_labels):
       'average_precision': average_precision
     }
   return metrics_dict
-
-
-def run_tflite_inference(audio_processor, model_settings, tflite_model_path, model_type="Float"):
-  # Load test data
-  np.random.seed(0)  # set random seed for reproducible test results.
-  with tf.compat.v1.Session() as sess:
-    test_data, test_labels = audio_processor.get_data(
-      -1, 0, model_settings, BACKGROUND_FREQUENCY, BACKGROUND_VOLUME_RANGE,
-      TIME_SHIFT_MS, 'testing', sess)
-  test_data = np.expand_dims(test_data, axis=1).astype(np.float32)
-
-  # Initialize the interpreter
-  interpreter = tf.lite.Interpreter(tflite_model_path,
-                                    experimental_op_resolver_type=tf.lite.experimental.OpResolverType.BUILTIN_REF)
-  interpreter.allocate_tensors()
-
-  input_details = interpreter.get_input_details()[0]
-  output_details = interpreter.get_output_details()[0]
-
-  print("Input tensor details:", input_details)
-  print("Output tensor details:", output_details)
-
-  # For save_quantized_modeld models, manually save_quantized_model the input data from float to integer
-  if model_type == "Quantized":
-    input_scale, input_zero_point = input_details["quantization"]
-    test_data = test_data / input_scale + input_zero_point
-    test_data = test_data.astype(input_details["dtype"])
-
-  TP = 0
-  FP = 0
-  FN = 0
-  for i in range(len(test_data)):
-    interpreter.set_tensor(input_details["index"], test_data[i])
-    interpreter.invoke()
-    output = interpreter.get_tensor(output_details["index"])[0]
-    top_prediction = output.argmax()
-    if top_prediction == test_labels[i]:
-      TP += 1
-    else:
-      FP += 1
-      FN += 1  # This assumes a binary classification. For multi-class, adjust accordingly.
-
-  precision = TP / (TP + FP) if TP + FP > 0 else 0
-  recall = TP / (TP + FN) if TP + FN > 0 else 0
-  F1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-
-  print(f'{model_type} model Precision: {precision:.3f}, Recall: {recall:.3f}, F1 Score: {F1_score:.3f}'
-        f' (Number of test samples={len(test_data)})')
 
 
 def collect_model_predictions(audio_processor, model_settings, tflite_model_path):
