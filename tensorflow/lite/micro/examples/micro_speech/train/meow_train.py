@@ -35,7 +35,7 @@ ALL_WORDS = list(set(input_data.prepare_words_list(WANTED_WORDS.split(','))))
 # TRAINING_STEPS=12000,3000 and LEARNING_RATE=0.001,0.0001
 # will run 12,000 training loops in total, with a rate of 0.001 for the first
 # 8,000, and 0.0001 for the final 3,000.
-TRAINING_STEPS = "4000,2000"
+TRAINING_STEPS = "2000,1000"
 LEARNING_RATE = "0.001,0.0001"
 
 # Calculate the total number of steps, which is used to identify the checkpoint
@@ -55,8 +55,8 @@ MODEL_ARCHITECTURE = 'tiny_conv'  # Other options include: single_fc, conv,
 
 # Constants used during training only
 VERBOSITY = 'WARN'
-EVAL_STEP_INTERVAL = '1000'
-SAVE_STEP_INTERVAL = '1000'
+EVAL_STEP_INTERVAL = '200'
+SAVE_STEP_INTERVAL = '200'
 
 # Constants for training directories and filepaths
 DATASET_DIR = '/tmp/dataset-2024-04-05-04-14-29/'
@@ -113,25 +113,6 @@ def print_mean_std(sample, sample_index):
   mean = np.mean(sample)
   std = np.std(sample)
   print(f"Sample {sample_index}: Mean = {mean:.2f}, Std Dev = {std:.2f}")
-
-
-def plot_results(predictions, true_labels):
-  save_confusion_matrix(predictions,
-                        true_labels,
-                        ALL_WORDS,
-                        PLOTS_DIR)
-
-  metrics_dict = evaluate_multiclass_precision_recall(predictions,
-                                                      true_labels,
-                                                      ALL_WORDS,
-                                                      plot_curves=True,
-                                                      save_dir=PLOTS_DIR)
-
-  plot_average_precision(metrics_dict, PLOTS_DIR)
-
-  plot_precision_recall(metrics_dict, PLOTS_DIR)
-
-  plot_f1_scores(metrics_dict, PLOTS_DIR)
 
 
 def ensure_dir(directory):
@@ -230,28 +211,24 @@ def write_c_source_files():
   )
 
 
-def quantize(audio_processor, model_settings):
+def save_quantized_model(audio_processor, model_settings, input_model_file, output_model_file):
   with tf.compat.v1.Session() as sess:
-    converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
+    converter = tf.lite.TFLiteConverter.from_saved_model(input_model_file)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.inference_input_type = tf.int8
     converter.inference_output_type = tf.int8
 
     def representative_dataset_gen():
-      # Use could use 100 samples or 10% of the dataset, whichever is smaller - we assume 100 is smaller
+      # Use 100 samples or 10% of the dataset, whichever is smaller.  This assumes 100 is smaller
       for i in range(100):
-        data, _ = audio_processor.get_data(1, i * 1, model_settings,
-                                           BACKGROUND_FREQUENCY,
-                                           BACKGROUND_VOLUME_RANGE,
-                                           TIME_SHIFT_MS,
-                                           'testing',
-                                           sess)
+        data, _ = audio_processor.get_data(1, i * 1, model_settings, BACKGROUND_FREQUENCY, BACKGROUND_VOLUME_RANGE,
+                                           TIME_SHIFT_MS, 'testing', sess)
         flattened_data = np.array(data.flatten(), dtype=np.float32).reshape(1, TOTAL_FEATURE_DIMENSION)
         yield [flattened_data]
 
     converter.representative_dataset = representative_dataset_gen
     tflite_model = converter.convert()
-    tflite_model_size = open(MODEL_TFLITE, "wb").write(tflite_model)
+    tflite_model_size = open(output_model_file, "wb").write(tflite_model)
     print("Quantized model is %d bytes" % tflite_model_size)
 
 
@@ -332,22 +309,7 @@ def list_to_c_array(input_list, array_name="myArray", data_type="char*"):
   return c_array_declaration
 
 
-def evaluate_multiclass_precision_recall(predictions, true_labels, class_labels, plot_curves=False, save_dir=None):
-  """
-  Evaluates and optionally plots and saves the Precision-Recall curve for each class in a multiclass setting to a
-  specified directory,
-  with class names provided by the user.
-
-  Parameters:
-  - predictions: numpy array of shape (num_samples, num_classes) containing the prediction scores for each class.
-  - true_labels: numpy array of shape (num_samples,) containing the true class labels.
-  - class_labels: list of strings, containing labels for each class.
-  - plot_curves: bool, if True, plot and save the Precision-Recall curve for each class.
-  - save_dir: str, directory where plots should be saved. If None, plots are not saved even if plot_curves is True.
-
-  Returns:
-  - A dictionary containing precision, recall, and average precision for each class.
-  """
+def generate_metrics_dictionary(predictions, true_labels, class_labels):
   num_classes = predictions.shape[1]
   metrics_dict = {}
 
@@ -367,26 +329,6 @@ def evaluate_multiclass_precision_recall(predictions, true_labels, class_labels,
       'recall': recall,
       'average_precision': average_precision
     }
-
-    # Optionally plot and save Precision-Recall curve
-    if plot_curves and save_dir is not None:
-      plt.figure()
-      plt.step(recall, precision, where='post')
-      plt.fill_between(recall, precision, step='post', alpha=0.2, color='b')
-      plt.xlabel('Recall')
-      plt.ylabel('Precision')
-      plt.ylim([0.0, 1.05])
-      plt.xlim([0.0, 1.0])
-      plt.title(f'{class_name} Precision-Recall curve: AP={average_precision:0.2f}')
-
-      # Check if save directory exists, create if not
-      if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-      # Save the figure
-      plt.savefig(os.path.join(save_dir, f'{class_name.replace(" ", "_")}_Precision_Recall_Curve.png'))
-      plt.close()
-
   return metrics_dict
 
 
@@ -410,7 +352,7 @@ def run_tflite_inference(audio_processor, model_settings, tflite_model_path, mod
   print("Input tensor details:", input_details)
   print("Output tensor details:", output_details)
 
-  # For quantized models, manually quantize the input data from float to integer
+  # For save_quantized_modeld models, manually save_quantized_model the input data from float to integer
   if model_type == "Quantized":
     input_scale, input_zero_point = input_details["quantization"]
     test_data = test_data / input_scale + input_zero_point
@@ -438,14 +380,12 @@ def run_tflite_inference(audio_processor, model_settings, tflite_model_path, mod
         f' (Number of test samples={len(test_data)})')
 
 
-def collect_model_predictions(audio_processor, model_settings, tflite_model_path, model_type="Float"):
-  # Load test data
+def collect_model_predictions(audio_processor, model_settings, tflite_model_path):
   np.random.seed(0)  # set random seed for reproducible test results.
   with tf.compat.v1.Session() as sess:
-    test_data, test_labels = audio_processor.get_data(
-      -1, 0, model_settings, BACKGROUND_FREQUENCY, BACKGROUND_VOLUME_RANGE,
-      TIME_SHIFT_MS, 'testing', sess)
-  test_data = np.expand_dims(test_data, axis=1).astype(np.float32)
+    test_data, test_labels = audio_processor.get_data(-1, 0, model_settings, BACKGROUND_FREQUENCY,
+                                                      BACKGROUND_VOLUME_RANGE, TIME_SHIFT_MS, 'testing', sess)
+    test_data = np.expand_dims(test_data, axis=1).astype(np.int8)
 
   # Initialize the interpreter
   interpreter = tf.lite.Interpreter(tflite_model_path,
@@ -461,11 +401,10 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
   predictions = []
   labels = []
 
-  # For quantized models, adjust the input data accordingly
-  if model_type == "Quantized":
-    input_scale, input_zero_point = input_details["quantization"]
-    test_data = test_data / input_scale + input_zero_point
-    test_data = test_data.astype(input_details["dtype"])
+  # For save_quantized_modeld models, adjust the input data accordingly
+  input_scale, input_zero_point = input_details["quantization"]
+  test_data = test_data / input_scale + input_zero_point
+  test_data = test_data.astype(input_details["dtype"])
 
   # Collect predictions and true labels
   for i in range(len(test_data)):
@@ -479,7 +418,7 @@ def collect_model_predictions(audio_processor, model_settings, tflite_model_path
   return np.array(predictions), np.array(labels)
 
 
-def save_confusion_matrix(predictions, true_labels, wanted_words, file_path):
+def plot_confusion_matrix(predictions, true_labels, wanted_words, file_path):
   """
   Generates and saves a confusion matrix plot from predictions and true labels.
 
@@ -505,6 +444,16 @@ def save_confusion_matrix(predictions, true_labels, wanted_words, file_path):
   # Save the plot to the specified file path
   plt.savefig(f"{file_path}/confusion_matrix.png")
   plt.close()  # Close the figure to free memory
+
+
+def total_execution_time(start_time):
+  execution_time = datetime.now() - start_time
+  hours, remainder = divmod(execution_time.seconds, 3600)
+  minutes = remainder // 60
+  if hours > 0:
+    print(f"Total execution time: {hours} hours and {minutes} minutes")
+  else:
+    print(f"Total execution time: {minutes} minutes")
 
 
 def main():
@@ -578,36 +527,24 @@ def main():
                                               model_settings,
                                               LOGS_DIR)
 
-  quantize(audio_processor, model_settings)
+  save_quantized_model(audio_processor, model_settings, SAVED_MODEL, MODEL_TFLITE)
 
-  print("Compute quantized model accuracy")
-  run_tflite_inference(audio_processor,
-                       model_settings,
-                       MODEL_TFLITE,
-                       model_type='Quantized')
+  predictions, true_labels = collect_model_predictions(audio_processor, model_settings, MODEL_TFLITE)
 
-  predictions, true_labels = collect_model_predictions(audio_processor,
-                                                       model_settings,
-                                                       MODEL_TFLITE,
-                                                       model_type='Quantized')
-  plot_results(predictions, true_labels)
+  plot_confusion_matrix(predictions, true_labels, ALL_WORDS, PLOTS_DIR)
+
+  metrics_dict = generate_metrics_dictionary(predictions, true_labels, ALL_WORDS)
+
+  plot_average_precision(metrics_dict, PLOTS_DIR)
+
+  plot_precision_recall(metrics_dict, PLOTS_DIR)
+
+  plot_f1_scores(metrics_dict, PLOTS_DIR)
 
   write_c_source_files()
 
 
 if __name__ == '__main__':
   start_time = datetime.now()
-
   main()
-
-  # Mark the end time
-  end_time = datetime.now()
-
-  # Calculate the total execution time
-  execution_time = end_time - start_time
-
-  # Convert the execution time to hours and minutes
-  execution_hours, remainder = divmod(execution_time.seconds, 3600)
-  execution_minutes = remainder // 60
-
-  print(f"Total execution time: {execution_hours} hours and {execution_minutes} minutes")
+  total_execution_time(start_time)
