@@ -35,7 +35,7 @@ ALL_WORDS = list(set(input_data.prepare_words_list(WANTED_WORDS.split(','))))
 # TRAINING_STEPS=12000,3000 and LEARNING_RATE=0.001,0.0001
 # will run 12,000 training loops in total, with a rate of 0.001 for the first
 # 8,000, and 0.0001 for the final 3,000.
-TRAINING_STEPS = "12000,3000"
+TRAINING_STEPS = "4000,2000"
 LEARNING_RATE = "0.001,0.0001"
 
 # Calculate the total number of steps, which is used to identify the checkpoint
@@ -232,10 +232,10 @@ def write_c_source_files():
 
 def quantize(audio_processor, model_settings):
   with tf.compat.v1.Session() as sess:
-    float_converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
-    float_tflite_model = float_converter.convert()
-    float_tflite_model_size = open(FLOAT_MODEL_TFLITE, "wb").write(float_tflite_model)
-    print("Float model is %d bytes" % float_tflite_model_size)
+    # float_converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
+    # float_tflite_model = float_converter.convert()
+    # float_tflite_model_size = open(FLOAT_MODEL_TFLITE, "wb").write(float_tflite_model)
+    # print("Float model is %d bytes" % float_tflite_model_size)
 
     converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
@@ -585,10 +585,10 @@ def main():
 
   quantize(audio_processor, model_settings)
 
-  print("Compute FLOAT model accuracy")
-  run_tflite_inference(audio_processor,
-                       model_settings,
-                       FLOAT_MODEL_TFLITE)
+  # print("Compute FLOAT model accuracy")
+  # run_tflite_inference(audio_processor,
+  #                      model_settings,
+  #                      FLOAT_MODEL_TFLITE)
 
   print("Compute quantized model accuracy")
   run_tflite_inference(audio_processor,
