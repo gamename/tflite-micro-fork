@@ -1,6 +1,7 @@
 """
 
 """
+import glob
 import os
 import sys
 from datetime import datetime
@@ -35,7 +36,7 @@ ALL_WORDS = list(set(input_data.prepare_words_list(WANTED_WORDS.split(','))))
 # TRAINING_STEPS=12000,3000 and LEARNING_RATE=0.001,0.0001
 # will run 12,000 training loops in total, with a rate of 0.001 for the first
 # 8,000, and 0.0001 for the final 3,000.
-TRAINING_STEPS = "3000,1500"
+TRAINING_STEPS = "1000,500"
 LEARNING_RATE = "0.001,0.0001"
 
 # Calculate the total number of steps, which is used to identify the checkpoint
@@ -55,11 +56,11 @@ MODEL_ARCHITECTURE = 'tiny_conv'  # Other options include: single_fc, conv,
 
 # Constants used during training only
 VERBOSITY = 'WARN'
-EVAL_STEP_INTERVAL = '200'
-SAVE_STEP_INTERVAL = '200'
+EVAL_STEP_INTERVAL = '100'
+SAVE_STEP_INTERVAL = '100'
 
 # Constants for training directories and filepaths
-DATASET_DIR = '/tmp/dataset-2024-04-05-04-14-29/'
+DATASET_DIR = '/tmp/tflite-meow-model-input-dataset-2024-04-11-13-59-04'
 
 datetime_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 PARENT_DIR = f"meow-training-{datetime_string}"
@@ -105,6 +106,20 @@ length_minus_window = (desired_samples - window_size_samples)
 # Adjusting the calculation here to more accurately reflect the handling of the last window
 spectrogram_length = 1 + int(length_minus_window / window_stride_samples) if length_minus_window >= 0 else 0
 TOTAL_FEATURE_DIMENSION = FEATURE_BIN_COUNT * spectrogram_length
+
+
+def count_wav_files(parent_directory):
+  print(f"Here are the number of .wav files in {parent_directory}:")
+  # Walk through all directories and subdirectories
+  for root, dirs, files in os.walk(parent_directory):
+    # For each subdirectory, count the number of .wav files
+    for subdir in dirs:
+      # Construct the path to the subdir
+      path = os.path.join(root, subdir)
+      # Use glob to find all .wav files in this subdir
+      wav_files = glob.glob(os.path.join(path, '*.wav'))
+      # Print the subdir name and the count of .wav files in it
+      print(f"    {subdir}: {len(wav_files)}")
 
 
 def print_mean_std(sample, sample_index):
@@ -395,6 +410,8 @@ def main():
   print("Total Feature Vector Dimension:", TOTAL_FEATURE_DIMENSION)
   print("Silent percentage: %s" % str(SILENT_PERCENTAGE))
   print("Unknown percentage: %s" % str(UNKNOWN_PERCENTAGE))
+
+  count_wav_files(DATASET_DIR)
 
   print("Training the model (this will take quite a while)...")
 
