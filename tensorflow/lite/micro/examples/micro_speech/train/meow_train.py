@@ -35,7 +35,7 @@ ALL_WORDS = list(set(input_data.prepare_words_list(WANTED_WORDS.split(','))))
 # TRAINING_STEPS=12000,3000 and LEARNING_RATE=0.001,0.0001
 # will run 12,000 training loops in total, with a rate of 0.001 for the first
 # 8,000, and 0.0001 for the final 3,000.
-TRAINING_STEPS = "2000,1000"
+TRAINING_STEPS = "3000,1500"
 LEARNING_RATE = "0.001,0.0001"
 
 # Calculate the total number of steps, which is used to identify the checkpoint
