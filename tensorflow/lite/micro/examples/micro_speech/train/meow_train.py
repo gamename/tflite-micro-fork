@@ -232,11 +232,6 @@ def write_c_source_files():
 
 def quantize(audio_processor, model_settings):
   with tf.compat.v1.Session() as sess:
-    # float_converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
-    # float_tflite_model = float_converter.convert()
-    # float_tflite_model_size = open(FLOAT_MODEL_TFLITE, "wb").write(float_tflite_model)
-    # print("Float model is %d bytes" % float_tflite_model_size)
-
     converter = tf.lite.TFLiteConverter.from_saved_model(SAVED_MODEL)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.inference_input_type = tf.int8
@@ -584,11 +579,6 @@ def main():
                                               LOGS_DIR)
 
   quantize(audio_processor, model_settings)
-
-  # print("Compute FLOAT model accuracy")
-  # run_tflite_inference(audio_processor,
-  #                      model_settings,
-  #                      FLOAT_MODEL_TFLITE)
 
   print("Compute quantized model accuracy")
   run_tflite_inference(audio_processor,
