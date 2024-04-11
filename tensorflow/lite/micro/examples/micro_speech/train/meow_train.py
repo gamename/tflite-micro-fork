@@ -76,9 +76,7 @@ os.makedirs(PLOTS_DIR, exist_ok=True)
 os.makedirs(TRAIN_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-MODEL_TF = os.path.join(MODELS_DIR, 'meow.pb')
 MODEL_TFLITE = os.path.join(MODELS_DIR, 'meow.tflite')
-FLOAT_MODEL_TFLITE = os.path.join(MODELS_DIR, 'float_meow.tflite')
 MODEL_TFLITE_MICRO = os.path.join(MODELS_DIR, 'meow.cc')
 MODEL_TFLITE_MICRO_HEADER = os.path.join(MODELS_DIR, 'meow.h')
 SAVED_MODEL = os.path.join(MODELS_DIR, 'saved_model')
@@ -126,8 +124,6 @@ def plot_average_precision(metrics_dict, plots_dir):
   plt.title('Average Precision per Class')
   plt.xticks(rotation=45)
   plt.tight_layout()
-
-  ensure_dir(plots_dir)
   plt.savefig(os.path.join(plots_dir, 'average_precision_per_class.png'))
   plt.close()
 
@@ -151,8 +147,6 @@ def plot_precision_recall(metrics_dict, plots_dir):
   ax.set_xticklabels(classes, rotation=45)
   ax.legend()
   plt.tight_layout()
-
-  ensure_dir(plots_dir)
   plt.savefig(os.path.join(plots_dir, 'precision_recall_per_class.png'))
   plt.close()
 
@@ -173,8 +167,6 @@ def plot_f1_scores(metrics_dict, plots_dir):
   plt.title('F1 Score per Class')
   plt.xticks(rotation=45)
   plt.tight_layout()
-
-  ensure_dir(plots_dir)
   plt.savefig(os.path.join(plots_dir, 'f1_scores_per_class.png'))
   plt.close()
 
@@ -401,6 +393,8 @@ def main():
   print("Total number of training steps: %s" % TOTAL_STEPS)
   print("All words: %s" % ALL_WORDS)
   print("Total Feature Vector Dimension:", TOTAL_FEATURE_DIMENSION)
+  print("Silent percentage: %s" % str(SILENT_PERCENTAGE))
+  print("Unknown percentage: %s" % str(UNKNOWN_PERCENTAGE))
 
   print("Training the model (this will take quite a while)...")
 
