@@ -60,7 +60,7 @@ EVAL_STEP_INTERVAL = '100'
 SAVE_STEP_INTERVAL = '100'
 
 # Constants for training directories and filepaths
-DATASET_DIR = '/tmp/tflite-meow-model-input-dataset-2024-04-11-13-59-04'
+DATASET_DIR = '/tmp/tflite-meow-model-input-dataset-2024-04-13-04-42-44'
 
 datetime_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 PARENT_DIR = f"meow-training-{datetime_string}"
@@ -469,7 +469,7 @@ def main():
                                               DATASET_DIR,
                                               SILENT_PERCENTAGE,
                                               UNKNOWN_PERCENTAGE,
-                                              ALL_WORDS,
+                                              WANTED_WORDS.split(','),
                                               VALIDATION_PERCENTAGE,
                                               TESTING_PERCENTAGE,
                                               model_settings,
